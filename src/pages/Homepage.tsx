@@ -135,7 +135,7 @@ const Homepage = () => {
             </p>
             <Link
               to="/create"
-              className="inline-block bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-4 px-12 rounded-full text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
+              className="inline-block bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-4 px-4 md:px-12 rounded-full text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
             >
               Create Your First Story! 🚀
             </Link>
