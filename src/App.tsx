@@ -17,7 +17,7 @@ function App() {
         <Router>
           <div className="min-h-screen transition-colors duration-300">
             <Navigation />
-            <main className="pt-16">
+            <main className="pt-18">
               <Routes>
                 <Route path="/" element={<Homepage />} />
                 <Route path="/create" element={<StoryPromptInput />} />
