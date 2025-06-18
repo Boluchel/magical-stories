@@ -230,14 +230,14 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
               <div className="grid grid-cols-2 gap-4">
                 <Link
                   to="/create"
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold py-3 px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold py-3 px-2 md:px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
                 >
                   Create New Story
                 </Link>
 
                 <Link
                   to="/saved"
-                  className="bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold py-3 px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                  className="bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold py-3 px-2 md:px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
                 >
                   View Saved Stories
                 </Link>
