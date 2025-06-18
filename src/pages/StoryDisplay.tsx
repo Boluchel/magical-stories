@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Pause, RotateCcw, Heart, Share2, Volume2 } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 const StoryDisplay = () => {
+  const { isDarkMode } = useTheme();
   const [storyData, setStoryData] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -48,9 +50,19 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
 
   if (!storyData) {
     return (
-      <div className="min-h-screen px-4 py-8 flex items-center justify-center">
-        <div className="text-center bg-white/80 backdrop-blur-sm rounded-3xl p-12 border-2 border-purple-100 shadow-lg">
-          <h2 className="text-3xl font-bold text-gray-800 mb-4">No Story Found</h2>
+      <div className={`min-h-screen px-4 py-8 flex items-center justify-center transition-colors duration-300 ${
+        isDarkMode 
+          ? 'bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900' 
+          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}>
+        <div className={`text-center backdrop-blur-sm rounded-3xl p-12 border-2 shadow-lg transition-colors duration-300 ${
+          isDarkMode 
+            ? 'bg-gray-800/80 border-purple-400' 
+            : 'bg-white/80 border-purple-100'
+        }`}>
+          <h2 className={`text-3xl font-bold mb-4 transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-800'
+          }`}>No Story Found</h2>
           <Link
             to="/create"
             className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-8 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-300"
@@ -63,43 +75,69 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
   }
 
   return (
-    <div className="min-h-screen px-4 py-8">
+    <div className={`min-h-screen px-4 py-8 transition-colors duration-300 ${
+      isDarkMode 
+        ? 'bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900' 
+        : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl sm:text-5xl font-bold text-gray-800 mb-4">
+          <h1 className={`text-3xl sm:text-5xl font-bold mb-4 transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-800'
+          }`}>
             Your Magical Story
           </h1>
-          <div className="bg-white/80 backdrop-blur-sm rounded-full px-6 py-2 inline-block border-2 border-purple-200 shadow-md">
-            <span className="text-gray-700 font-medium">
+          <div className={`backdrop-blur-sm rounded-full px-6 py-2 inline-block border-2 shadow-md transition-colors duration-300 ${
+            isDarkMode 
+              ? 'bg-gray-800/80 border-purple-400 text-gray-200' 
+              : 'bg-white/80 border-purple-200 text-gray-700'
+          }`}>
+            <span className="font-medium">
               Theme: {storyData.theme} • Character: {storyData.character} • Language: {storyData.language}
             </span>
           </div>
         </div>
 
         {/* Story Content */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 border-2 border-purple-100 shadow-lg mb-8">
+        <div className={`backdrop-blur-sm rounded-3xl p-8 border-2 shadow-lg mb-8 transition-colors duration-300 ${
+          isDarkMode 
+            ? 'bg-gray-800/80 border-purple-400' 
+            : 'bg-white/80 border-purple-100'
+        }`}>
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Story Text */}
             <div className="space-y-6">
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">
+              <h2 className={`text-2xl sm:text-3xl font-bold mb-4 transition-colors duration-300 ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-800'
+              }`}>
                 {sampleStory.title}
               </h2>
               
-              <div className="text-gray-700 text-lg leading-relaxed space-y-4">
+              <div className={`text-lg leading-relaxed space-y-4 transition-colors duration-300 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
                 {sampleStory.text.split('\n\n').map((paragraph, index) => (
                   <p key={index}>{paragraph}</p>
                 ))}
               </div>
 
               {/* Audio Controls */}
-              <div className="bg-purple-50 rounded-2xl p-6 border-2 border-purple-200">
+              <div className={`rounded-2xl p-6 border-2 transition-colors duration-300 ${
+                isDarkMode 
+                  ? 'bg-purple-900/50 border-purple-400' 
+                  : 'bg-purple-50 border-purple-200'
+              }`}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-2">
-                    <Volume2 className="w-5 h-5 text-purple-600" />
-                    <span className="text-gray-800 font-medium">Story Narration</span>
+                    <Volume2 className={`w-5 h-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                    <span className={`font-medium transition-colors duration-300 ${
+                      isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                    }`}>Story Narration</span>
                   </div>
-                  <span className="text-gray-600 text-sm">ElevenLabs AI Voice</span>
+                  <span className={`text-sm transition-colors duration-300 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>ElevenLabs AI Voice</span>
                 </div>
                 
                 <div className="flex items-center space-x-4">
@@ -118,7 +156,9 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
                     )}
                   </button>
                   
-                  <div className="flex-1 bg-purple-200 rounded-full h-2">
+                  <div className={`flex-1 rounded-full h-2 transition-colors duration-300 ${
+                    isDarkMode ? 'bg-purple-800' : 'bg-purple-200'
+                  }`}>
                     <div 
                       className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
                       style={{ width: isPlaying ? '45%' : '0%' }}
@@ -127,9 +167,13 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
                   
                   <button
                     onClick={handlePlayPause}
-                    className="p-2 bg-purple-200 rounded-full hover:bg-purple-300 transition-all duration-300"
+                    className={`p-2 rounded-full transition-all duration-300 ${
+                      isDarkMode 
+                        ? 'bg-purple-800 hover:bg-purple-700' 
+                        : 'bg-purple-200 hover:bg-purple-300'
+                    }`}
                   >
-                    <RotateCcw className="w-5 h-5 text-purple-700" />
+                    <RotateCcw className={`w-5 h-5 ${isDarkMode ? 'text-purple-300' : 'text-purple-700'}`} />
                   </button>
                 </div>
               </div>
@@ -137,13 +181,19 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
 
             {/* Story Image */}
             <div className="space-y-6">
-              <div className="bg-purple-50 rounded-2xl p-4 border-2 border-purple-200">
+              <div className={`rounded-2xl p-4 border-2 transition-colors duration-300 ${
+                isDarkMode 
+                  ? 'bg-purple-900/50 border-purple-400' 
+                  : 'bg-purple-50 border-purple-200'
+              }`}>
                 <img
                   src={sampleStory.imageUrl}
                   alt="Story illustration"
                   className="w-full h-64 sm:h-80 object-cover rounded-xl"
                 />
-                <p className="text-gray-600 text-sm mt-2 text-center">
+                <p className={`text-sm mt-2 text-center transition-colors duration-300 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>
                   AI-Generated Story Illustration
                 </p>
               </div>
@@ -155,7 +205,9 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
                   className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
                     isSaved
                       ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-                      : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
+                      : isDarkMode
+                        ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
+                        : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
                   }`}
                 >
                   <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
@@ -164,7 +216,11 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
 
                 <button
                   onClick={handleShare}
-                  className="flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium bg-white/60 border-2 border-blue-200 text-gray-700 hover:bg-white/80 transition-all duration-300 transform hover:scale-105"
+                  className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                    isDarkMode
+                      ? 'bg-gray-700/60 border-2 border-blue-400 text-gray-200 hover:bg-gray-700/80'
+                      : 'bg-white/60 border-2 border-blue-200 text-gray-700 hover:bg-white/80'
+                  }`}
                 >
                   <Share2 className="w-5 h-5" />
                   <span>Share</span>

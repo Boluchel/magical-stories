@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Heart, Trash2, Plus, BookOpen } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 const SavedStories = () => {
+  const { isDarkMode } = useTheme();
+  
   // Sample saved stories data - in a real app, this would come from a database
   const [savedStories] = useState([
     {
@@ -104,17 +107,25 @@ const SavedStories = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-8">
+    <div className={`min-h-screen px-4 py-8 transition-colors duration-300 ${
+      isDarkMode 
+        ? 'bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900' 
+        : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+    }`}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl sm:text-6xl font-bold text-gray-800 mb-4">
+          <h1 className={`text-4xl sm:text-6xl font-bold mb-4 transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-800'
+          }`}>
             Your Story
             <span className="bg-gradient-to-r from-yellow-500 to-pink-500 bg-clip-text text-transparent">
               {' '}Collection
             </span>
           </h1>
-          <p className="text-xl text-gray-700 font-medium mb-6">
+          <p className={`text-xl font-medium mb-6 transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-300' : 'text-gray-700'
+          }`}>
             All your magical adventures in one place! ✨
           </p>
           
@@ -133,7 +144,11 @@ const SavedStories = () => {
             {savedStories.map((story) => (
               <div
                 key={story.id}
-                className="bg-white/80 backdrop-blur-sm rounded-2xl overflow-hidden border-2 border-purple-100 hover:bg-white/90 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className={`backdrop-blur-sm rounded-2xl overflow-hidden border-2 hover:bg-opacity-90 transition-all duration-300 transform hover:scale-105 shadow-lg ${
+                  isDarkMode 
+                    ? 'bg-gray-800/80 border-purple-400' 
+                    : 'bg-white/80 border-purple-100'
+                }`}
               >
                 {/* Thumbnail */}
                 <div className="relative">
@@ -174,11 +189,15 @@ const SavedStories = () => {
 
                 {/* Content */}
                 <div className="p-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-2 line-clamp-2">
+                  <h3 className={`text-xl font-bold mb-2 line-clamp-2 transition-colors duration-300 ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-800'
+                  }`}>
                     {story.title}
                   </h3>
                   
-                  <p className="text-gray-600 text-sm mb-4">
+                  <p className={`text-sm mb-4 transition-colors duration-300 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
                     Created on {new Date(story.createdAt).toLocaleDateString()}
                   </p>
 
@@ -214,10 +233,18 @@ const SavedStories = () => {
         ) : (
           /* Empty State */
           <div className="text-center py-16">
-            <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-12 border-2 border-purple-100 shadow-lg max-w-md mx-auto">
+            <div className={`backdrop-blur-sm rounded-3xl p-12 border-2 shadow-lg max-w-md mx-auto transition-colors duration-300 ${
+              isDarkMode 
+                ? 'bg-gray-800/80 border-purple-400' 
+                : 'bg-white/80 border-purple-100'
+            }`}>
               <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-6" />
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">No Stories Yet</h3>
-              <p className="text-gray-600 mb-6">
+              <h3 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-800'
+              }`}>No Stories Yet</h3>
+              <p className={`mb-6 transition-colors duration-300 ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
                 Your magical story collection is empty. Create your first adventure!
               </p>
               <Link

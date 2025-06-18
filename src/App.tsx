@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Navigation from './components/Navigation';
 import Homepage from './pages/Homepage';
 import StoryPromptInput from './pages/StoryPromptInput';
@@ -9,20 +10,22 @@ import About from './pages/About';
 
 function App() {
   return (
-    <Router>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-        <Navigation />
-        <main className="pt-20 pb-8">
-          <Routes>
-            <Route path="/" element={<Homepage />} />
-            <Route path="/create" element={<StoryPromptInput />} />
-            <Route path="/story" element={<StoryDisplay />} />
-            <Route path="/saved" element={<SavedStories />} />
-            <Route path="/about" element={<About />} />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <div className="min-h-screen transition-colors duration-300">
+          <Navigation />
+          <main className="pt-20 pb-8">
+            <Routes>
+              <Route path="/" element={<Homepage />} />
+              <Route path="/create" element={<StoryPromptInput />} />
+              <Route path="/story" element={<StoryDisplay />} />
+              <Route path="/saved" element={<SavedStories />} />
+              <Route path="/about" element={<About />} />
+            </Routes>
+          </main>
+        </div>
+      </Router>
+    </ThemeProvider>
   );
 }
 
