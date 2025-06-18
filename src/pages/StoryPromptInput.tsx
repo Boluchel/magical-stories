@@ -87,7 +87,7 @@ const StoryPromptInput = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className={`backdrop-blur-sm rounded-3xl p-8 border-2 shadow-lg transition-colors duration-300 ${
+        <form onSubmit={handleSubmit} className={`backdrop-blur-sm rounded-3xl p-6 md:p-8 border-2 shadow-lg transition-colors duration-300 ${
           isDarkMode 
             ? 'bg-gray-800/80 border-purple-400' 
             : 'bg-white/80 border-purple-100'
