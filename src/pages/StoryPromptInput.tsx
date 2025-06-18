@@ -203,7 +203,7 @@ const StoryPromptInput = () => {
             <button
               type="submit"
               disabled={!formData.theme || !formData.character || !formData.language}
-              className="magic-button disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-12 rounded-full text-lg md:text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 glow"
+              className="magic-button disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-8 md:px-12 rounded-full text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 glow"
             >
               🌟 Create My Story! 🌟
             </button>
