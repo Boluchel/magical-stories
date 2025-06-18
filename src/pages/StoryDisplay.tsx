@@ -202,7 +202,7 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={handleSave}
-                  className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                  className={`flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
                     isSaved
                       ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
                       : isDarkMode
@@ -216,7 +216,7 @@ From that day on, Sparkle became known as the Guardian of Colors, protecting the
 
                 <button
                   onClick={handleShare}
-                  className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                  className={`flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
                     isDarkMode
                       ? 'bg-gray-700/60 border-2 border-blue-400 text-gray-200 hover:bg-gray-700/80'
                       : 'bg-white/60 border-2 border-blue-200 text-gray-700 hover:bg-white/80'
