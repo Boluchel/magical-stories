@@ -43,6 +43,11 @@ async function retryWithBackoff<T>(
       
       // Check if it's a rate limit error (429) or server error (5xx)
       if (error instanceof Response) {
+        // Don't retry on payment required (402) - this is a billing issue
+        if (error.status === 402) {
+          throw new Error("AI service billing issue: Please check your PicaOS account credits or subscription status.");
+        }
+        
         if (error.status === 429 || (error.status >= 500 && error.status < 600)) {
           if (attempt < maxRetries) {
             const delay = baseDelay * Math.pow(2, attempt);
@@ -67,6 +72,11 @@ async function retryWithBackoff<T>(
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 3): Promise<Response> {
   return retryWithBackoff(async () => {
     const response = await fetch(url, options);
+    
+    // If payment required, throw a specific error
+    if (response.status === 402) {
+      throw new Error("AI service billing issue: Please check your PicaOS account credits or subscription status.");
+    }
     
     // If rate limited or server error, throw the response to trigger retry
     if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
@@ -164,6 +174,12 @@ Deno.serve(async (req: Request) => {
 
     if (!storyResponse.ok) {
       const errorData = await storyResponse.json().catch(() => ({}));
+      
+      // Handle specific error cases
+      if (storyResponse.status === 402) {
+        throw new Error("AI service billing issue: Please check your PicaOS account credits or subscription status.");
+      }
+      
       throw new Error(`Story generation failed: ${storyResponse.statusText} - ${errorData.error || ''}`);
     }
 
@@ -236,6 +252,7 @@ Deno.serve(async (req: Request) => {
       }
     } catch (error) {
       console.warn('Audio generation failed, continuing without audio:', error.message);
+      // Don't fail the entire request if audio generation fails
     }
 
     // Step 3: Save to Supabase
