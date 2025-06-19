@@ -1,11 +1,10 @@
 /*
   # Generate Story Edge Function
   
-  This function handles the complete story generation pipeline:
+  This function handles the story generation pipeline:
   1. Generate story text using DeepSeek via Pica
-  2. Generate illustration using DALL-E via Pica
-  3. Generate audio narration using ElevenLabs via Pica
-  4. Save the complete story to Supabase
+  2. Generate audio narration using ElevenLabs via Pica
+  3. Save the complete story to Supabase
 */
 
 const corsHeaders = {
@@ -124,10 +123,9 @@ Deno.serve(async (req: Request) => {
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
     const PICA_DEEP_SEEK_CONNECTION_KEY = Deno.env.get('PICA_DEEP_SEEK_CONNECTION_KEY');
-    const PICA_OPENAI_CONNECTION_KEY = Deno.env.get('PICA_OPENAI_CONNECTION_KEY');
     const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
-    if (!PICA_SECRET_KEY || !PICA_DEEP_SEEK_CONNECTION_KEY || !PICA_OPENAI_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
+    if (!PICA_SECRET_KEY || !PICA_DEEP_SEEK_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
       return new Response(
         JSON.stringify({ error: "Missing API configuration" }),
         {
@@ -187,41 +185,7 @@ Deno.serve(async (req: Request) => {
       title = `The ${character}'s ${theme} Adventure`;
     }
 
-    // Step 2: Generate illustration with retry mechanism
-    console.log('Generating illustration...');
-    const imagePrompt = `A colorful, child-friendly cartoon illustration for a children's story about a ${character} in a ${theme} setting. ${customPrompt}. Bright colors, magical atmosphere, suitable for children's book.`;
-    
-    const imageHeaders: PicaHeaders = {
-      'Content-Type': 'application/json',
-      'x-pica-secret': PICA_SECRET_KEY,
-      'x-pica-connection-key': PICA_OPENAI_CONNECTION_KEY,
-      'x-pica-action-id': 'conn_mod_def::GDzgKm29yzA::qOaVIyE3RWmrUDhvW7VmDw'
-    };
-
-    let imageUrl = '';
-    try {
-      const imageResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/images/generations', {
-        method: 'POST',
-        headers: imageHeaders,
-        body: JSON.stringify({
-          prompt: imagePrompt,
-          model: 'dall-e-3',
-          n: 1,
-          size: '1024x1024',
-          response_format: 'url'
-        })
-      }, 2); // Fewer retries for image generation
-
-      if (imageResponse.ok) {
-        const imageData = await imageResponse.json();
-        imageUrl = imageData.data[0]?.url || '';
-        console.log('Image generated successfully');
-      }
-    } catch (error) {
-      console.warn('Image generation failed, continuing without image:', error.message);
-    }
-
-    // Step 3: Generate audio narration with retry mechanism
+    // Step 2: Generate audio narration with retry mechanism
     console.log('Generating audio narration...');
     
     let audioUrl = '';
@@ -301,7 +265,7 @@ Deno.serve(async (req: Request) => {
       console.warn('Audio generation failed, continuing without audio:', error.message);
     }
 
-    // Step 4: Save to Supabase
+    // Step 3: Save to Supabase
     console.log('Saving story to database...');
     
     // Get user ID from JWT token
@@ -329,7 +293,7 @@ Deno.serve(async (req: Request) => {
         language: language,
         custom_prompt: customPrompt,
         story_text: storyText,
-        image_url: imageUrl,
+        image_url: null, // No image generation
         audio_url: audioUrl,
         user_id: null // Will be set by RLS policy
       })
@@ -353,7 +317,7 @@ Deno.serve(async (req: Request) => {
           language: language,
           customPrompt: customPrompt,
           storyText: storyText,
-          imageUrl: imageUrl,
+          imageUrl: null, // No image
           audioUrl: audioUrl,
           createdAt: savedStory[0]?.created_at
         }
