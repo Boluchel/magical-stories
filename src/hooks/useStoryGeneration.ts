@@ -52,13 +52,17 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Story generation failed');
+        // Prioritize the details field if available, otherwise fall back to error field
+        const errorMessage = errorData.details || errorData.error || 'Story generation failed';
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       
       if (!data.success) {
-        throw new Error(data.error || 'Story generation failed');
+        // Prioritize the details field if available, otherwise fall back to error field
+        const errorMessage = data.details || data.error || 'Story generation failed';
+        throw new Error(errorMessage);
       }
 
       return data.story;
