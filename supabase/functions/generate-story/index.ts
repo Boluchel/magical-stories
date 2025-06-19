@@ -28,6 +28,56 @@ interface PicaHeaders {
   'x-pica-action-id': string;
 }
 
+// Retry mechanism with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Check if it's a rate limit error (429) or server error (5xx)
+      if (error instanceof Response) {
+        if (error.status === 429 || (error.status >= 500 && error.status < 600)) {
+          if (attempt < maxRetries) {
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.log(`Attempt ${attempt + 1} failed with status ${error.status}, retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+      }
+      
+      // For non-retryable errors or max retries reached, throw immediately
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+    }
+  }
+  
+  throw lastError!;
+}
+
+// Enhanced fetch with retry logic
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 3): Promise<Response> {
+  return retryWithBackoff(async () => {
+    const response = await fetch(url, options);
+    
+    // If rate limited or server error, throw the response to trigger retry
+    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+      throw response;
+    }
+    
+    return response;
+  }, maxRetries);
+}
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
@@ -86,7 +136,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Step 1: Generate story text
+    // Step 1: Generate story text with retry mechanism
     console.log('Generating story text...');
     const storyPrompt = `Write a short, engaging, child-friendly story in ${language} about a ${character} in a ${theme} setting. ${customPrompt}. Make it magical and fun for children aged 5-12. Keep it under 500 words.`;
     
@@ -97,7 +147,7 @@ Deno.serve(async (req: Request) => {
       'x-pica-action-id': 'conn_mod_def::GDzgIxPFYP0::2bW4lQ29TAuimPnr1tYXww'
     };
 
-    const storyResponse = await fetch('https://api.picaos.com/v1/passthrough/completions', {
+    const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/completions', {
       method: 'POST',
       headers: storyHeaders,
       body: JSON.stringify({
@@ -106,7 +156,7 @@ Deno.serve(async (req: Request) => {
         max_tokens: 512,
         temperature: 0.8
       })
-    });
+    }, 3);
 
     if (!storyResponse.ok) {
       throw new Error(`Story generation failed: ${storyResponse.statusText}`);
@@ -126,7 +176,7 @@ Deno.serve(async (req: Request) => {
       title = `The ${character}'s ${theme} Adventure`;
     }
 
-    // Step 2: Generate illustration
+    // Step 2: Generate illustration with retry mechanism
     console.log('Generating illustration...');
     const imagePrompt = `A colorful, child-friendly cartoon illustration for a children's story about a ${character} in a ${theme} setting. ${customPrompt}. Bright colors, magical atmosphere, suitable for children's book.`;
     
@@ -137,105 +187,107 @@ Deno.serve(async (req: Request) => {
       'x-pica-action-id': 'conn_mod_def::GDzgKm29yzA::qOaVIyE3RWmrUDhvW7VmDw'
     };
 
-    const imageResponse = await fetch('https://api.picaos.com/v1/passthrough/images/generations', {
-      method: 'POST',
-      headers: imageHeaders,
-      body: JSON.stringify({
-        prompt: imagePrompt,
-        model: 'dall-e-3',
-        n: 1,
-        size: '1024x1024',
-        response_format: 'url'
-      })
-    });
-
     let imageUrl = '';
-    if (imageResponse.ok) {
-      const imageData = await imageResponse.json();
-      imageUrl = imageData.data[0]?.url || '';
-      console.log('Image generated successfully');
-    } else {
-      console.warn('Image generation failed, continuing without image');
+    try {
+      const imageResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/images/generations', {
+        method: 'POST',
+        headers: imageHeaders,
+        body: JSON.stringify({
+          prompt: imagePrompt,
+          model: 'dall-e-3',
+          n: 1,
+          size: '1024x1024',
+          response_format: 'url'
+        })
+      }, 2); // Fewer retries for image generation
+
+      if (imageResponse.ok) {
+        const imageData = await imageResponse.json();
+        imageUrl = imageData.data[0]?.url || '';
+        console.log('Image generated successfully');
+      }
+    } catch (error) {
+      console.warn('Image generation failed, continuing without image:', error.message);
     }
 
-    // Step 3: Generate audio narration
+    // Step 3: Generate audio narration with retry mechanism
     console.log('Generating audio narration...');
     
-    // First, get available voices
-    const voicesHeaders: PicaHeaders = {
-      'Content-Type': 'application/json',
-      'x-pica-secret': PICA_SECRET_KEY,
-      'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
-      'x-pica-action-id': 'conn_mod_def::GCccDGTXyS4::tPfw-4H5Rd-0aLiJH7LymA'
-    };
-
-    const voicesResponse = await fetch('https://api.picaos.com/v1/passthrough/v1/voices', {
-      method: 'GET',
-      headers: voicesHeaders
-    });
-
     let audioUrl = '';
-    if (voicesResponse.ok) {
-      const voicesData = await voicesResponse.json();
-      
-      // Find a suitable child-friendly voice
-      const childVoice = voicesData.voices?.find((voice: any) => 
-        voice.labels?.age === 'young' || 
-        voice.labels?.use_case?.includes('narration') ||
-        voice.name?.toLowerCase().includes('child')
-      );
-      
-      const voiceId = childVoice?.voice_id || voicesData.voices?.[0]?.voice_id;
-      
-      if (voiceId) {
-        // Generate audio
-        const audioHeaders: PicaHeaders = {
-          'Content-Type': 'application/json',
-          'x-pica-secret': PICA_SECRET_KEY,
-          'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
-          'x-pica-action-id': 'conn_mod_def::GCccCs7_t7Q::QpqEyuj2S4W481S8S1asbA'
-        };
+    try {
+      // First, get available voices
+      const voicesHeaders: PicaHeaders = {
+        'Content-Type': 'application/json',
+        'x-pica-secret': PICA_SECRET_KEY,
+        'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+        'x-pica-action-id': 'conn_mod_def::GCccDGTXyS4::tPfw-4H5Rd-0aLiJH7LymA'
+      };
 
-        // Map language to language code
-        const languageCodes: { [key: string]: string } = {
-          'english': 'en',
-          'spanish': 'es',
-          'french': 'fr',
-          'german': 'de',
-          'italian': 'it',
-          'portuguese': 'pt'
-        };
+      const voicesResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/v1/voices', {
+        method: 'GET',
+        headers: voicesHeaders
+      }, 2);
 
-        const languageCode = languageCodes[language.toLowerCase()] || 'en';
+      if (voicesResponse.ok) {
+        const voicesData = await voicesResponse.json();
+        
+        // Find a suitable child-friendly voice
+        const childVoice = voicesData.voices?.find((voice: any) => 
+          voice.labels?.age === 'young' || 
+          voice.labels?.use_case?.includes('narration') ||
+          voice.name?.toLowerCase().includes('child')
+        );
+        
+        const voiceId = childVoice?.voice_id || voicesData.voices?.[0]?.voice_id;
+        
+        if (voiceId) {
+          // Generate audio
+          const audioHeaders: PicaHeaders = {
+            'Content-Type': 'application/json',
+            'x-pica-secret': PICA_SECRET_KEY,
+            'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+            'x-pica-action-id': 'conn_mod_def::GCccCs7_t7Q::QpqEyuj2S4W481S8S1asbA'
+          };
 
-        const audioResponse = await fetch(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${voiceId}`, {
-          method: 'POST',
-          headers: audioHeaders,
-          body: JSON.stringify({
-            text: storyText,
-            model_id: 'eleven_monolingual_v1',
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.7,
-              style: 0.3,
-              use_speaker_boost: true
-            },
-            language_code: languageCode,
-            output_format: 'mp3_44100_128'
-          })
-        });
+          // Map language to language code
+          const languageCodes: { [key: string]: string } = {
+            'english': 'en',
+            'spanish': 'es',
+            'french': 'fr',
+            'german': 'de',
+            'italian': 'it',
+            'portuguese': 'pt'
+          };
 
-        if (audioResponse.ok) {
-          // For now, we'll store a placeholder URL since we'd need to upload the audio blob
-          // In a production app, you'd upload the audio to Supabase Storage
-          audioUrl = 'audio_generated'; // Placeholder
-          console.log('Audio generated successfully');
-        } else {
-          console.warn('Audio generation failed, continuing without audio');
+          const languageCode = languageCodes[language.toLowerCase()] || 'en';
+
+          const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${voiceId}`, {
+            method: 'POST',
+            headers: audioHeaders,
+            body: JSON.stringify({
+              text: storyText,
+              model_id: 'eleven_monolingual_v1',
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.7,
+                style: 0.3,
+                use_speaker_boost: true
+              },
+              language_code: languageCode,
+              output_format: 'mp3_44100_128'
+            })
+          }, 2);
+
+          if (audioResponse.ok) {
+            // For now, we'll store a placeholder URL since we'd need to upload the audio blob
+            // In a production app, you'd upload the audio to Supabase Storage
+            audioUrl = 'audio_generated'; // Placeholder
+            console.log('Audio generated successfully');
+          }
         }
       }
-    } else {
-      console.warn('Voice listing failed, continuing without audio');
+    } catch (error) {
+      console.warn('Audio generation failed, continuing without audio:', error.message);
     }
 
     // Step 4: Save to Supabase
