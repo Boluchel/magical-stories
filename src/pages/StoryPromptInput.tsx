@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Wand2, Star, Hexagon as Dragon } from 'lucide-react';
+import { Sparkles, Wand2, Star, Hexagon as Dragon, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useStoryGeneration } from '../hooks/useStoryGeneration';
 
 const StoryPromptInput = () => {
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
+  const { user } = useAuth();
+  const { generateStory, loading, error } = useStoryGeneration();
+  
   const [formData, setFormData] = useState({
     theme: '',
     character: '',
@@ -40,15 +45,66 @@ const StoryPromptInput = () => {
     { value: 'portuguese', label: '🇵🇹 Português' }
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('storyData', JSON.stringify(formData));
-    navigate('/story');
+    
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    try {
+      const story = await generateStory({
+        theme: formData.theme,
+        character: formData.character,
+        language: formData.language,
+        customPrompt: formData.customPrompt
+      });
+
+      // Store the generated story data for the display page
+      localStorage.setItem('currentStory', JSON.stringify(story));
+      navigate('/story');
+    } catch (err) {
+      console.error('Story generation failed:', err);
+      // Error is handled by the hook
+    }
   };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+
+  // Redirect to auth if not logged in
+  if (!user) {
+    return (
+      <div className={`min-h-screen px-4 py-8 flex items-center justify-center transition-colors duration-300 ${
+        isDarkMode 
+          ? 'bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900' 
+          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
+      }`}>
+        <div className={`text-center backdrop-blur-sm rounded-3xl p-12 border-2 shadow-lg transition-colors duration-300 ${
+          isDarkMode 
+            ? 'bg-gray-800/80 border-purple-400' 
+            : 'bg-white/80 border-purple-100'
+        }`}>
+          <h2 className={`text-3xl font-bold mb-4 transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-100' : 'text-gray-800'
+          }`}>Login Required</h2>
+          <p className={`text-lg mb-6 transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-300' : 'text-gray-700'
+          }`}>
+            Please log in to create magical stories!
+          </p>
+          <button
+            onClick={() => navigate('/auth')}
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-8 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen px-4 py-8 transition-colors duration-300 ${
@@ -82,9 +138,17 @@ const StoryPromptInput = () => {
           <p className={`text-xl font-medium transition-colors duration-300 ${
             isDarkMode ? 'text-gray-300' : 'text-gray-700'
           }`}>
-            Choose your adventure details and let the magic begin! ✨
+            Choose your adventure details and let AI create magic! ✨
           </p>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl max-w-2xl mx-auto">
+            <p className="font-medium">Story Generation Failed</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className={`backdrop-blur-sm rounded-3xl p-6 md:p-8 border-2 shadow-lg transition-colors duration-300 ${
@@ -106,7 +170,8 @@ const StoryPromptInput = () => {
                   key={theme.value}
                   type="button"
                   onClick={() => handleInputChange('theme', theme.value)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${
+                  disabled={loading}
+                  className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formData.theme === theme.value
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 border-purple-300 text-white shadow-lg'
                       : isDarkMode
@@ -135,7 +200,8 @@ const StoryPromptInput = () => {
                   key={character.value}
                   type="button"
                   onClick={() => handleInputChange('character', character.value)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${
+                  disabled={loading}
+                  className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formData.character === character.value
                       ? 'bg-gradient-to-r from-blue-500 to-teal-500 border-blue-300 text-white shadow-lg'
                       : isDarkMode
@@ -164,7 +230,8 @@ const StoryPromptInput = () => {
                   key={language.value}
                   type="button"
                   onClick={() => handleInputChange('language', language.value)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${
+                  disabled={loading}
+                  className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formData.language === language.value
                       ? 'bg-gradient-to-r from-green-500 to-blue-500 border-green-300 text-white shadow-lg'
                       : isDarkMode
@@ -188,8 +255,9 @@ const StoryPromptInput = () => {
             <textarea
               value={formData.customPrompt}
               onChange={(e) => handleInputChange('customPrompt', e.target.value)}
+              disabled={loading}
               placeholder="Tell us more about your story... What happens in your adventure?"
-              className={`w-full p-4 rounded-xl border-2 font-medium resize-none transition-all duration-300 ${
+              className={`w-full p-4 rounded-xl border-2 font-medium resize-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDarkMode
                   ? 'bg-gray-700/60 border-purple-400 text-gray-200 placeholder-gray-400 focus:bg-gray-700/80 focus:border-purple-300'
                   : 'bg-white/60 border-purple-200 text-gray-700 placeholder-gray-500 focus:bg-white/80 focus:border-purple-400'
@@ -202,15 +270,25 @@ const StoryPromptInput = () => {
           <div className="text-center">
             <button
               type="submit"
-              disabled={!formData.theme || !formData.character || !formData.language}
-              className="magic-button disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-8 md:px-12 rounded-full text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 glow"
+              disabled={!formData.theme || !formData.character || !formData.language || loading}
+              className="magic-button disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-8 md:px-12 rounded-full text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 glow flex items-center justify-center mx-auto min-w-[200px]"
             >
-              🌟 Create My Story! 🌟
+              {loading ? (
+                <>
+                  <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+                  Creating Magic...
+                </>
+              ) : (
+                '🌟 Create My Story! 🌟'
+              )}
             </button>
             <p className={`text-sm mt-4 transition-colors duration-300 ${
               isDarkMode ? 'text-gray-400' : 'text-gray-600'
             }`}>
-              This will generate your personalized story with AI magic!
+              {loading 
+                ? 'AI is generating your personalized story with illustrations and narration...' 
+                : 'This will generate your personalized story with AI magic!'
+              }
             </p>
           </div>
         </form>
