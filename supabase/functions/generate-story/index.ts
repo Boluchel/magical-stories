@@ -158,7 +158,7 @@ Deno.serve(async (req: Request) => {
         ],
         model: 'deepseek-chat',
         max_tokens: 1024,
-        temperature: 0.8
+        temperature: 1.5
       })
     }, 3);
 
