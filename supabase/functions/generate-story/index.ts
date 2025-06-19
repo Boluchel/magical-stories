@@ -2,7 +2,7 @@
   # Generate Story Edge Function
   
   This function handles the complete story generation pipeline:
-  1. Generate story text using OpenAI via Pica
+  1. Generate story text using DeepSeek via Pica
   2. Generate illustration using DALL-E via Pica
   3. Generate audio narration using ElevenLabs via Pica
   4. Save the complete story to Supabase
@@ -123,10 +123,11 @@ Deno.serve(async (req: Request) => {
 
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
+    const PICA_DEEP_SEEK_CONNECTION_KEY = Deno.env.get('PICA_DEEP_SEEK_CONNECTION_KEY');
     const PICA_OPENAI_CONNECTION_KEY = Deno.env.get('PICA_OPENAI_CONNECTION_KEY');
     const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
-    if (!PICA_SECRET_KEY || !PICA_OPENAI_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
+    if (!PICA_SECRET_KEY || !PICA_DEEP_SEEK_CONNECTION_KEY || !PICA_OPENAI_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
       return new Response(
         JSON.stringify({ error: "Missing API configuration" }),
         {
@@ -136,23 +137,33 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Step 1: Generate story text with retry mechanism
-    console.log('Generating story text...');
-    const storyPrompt = `Write a short, engaging, child-friendly story in ${language} about a ${character} in a ${theme} setting. ${customPrompt}. Make it magical and fun for children aged 5-12. Keep it under 500 words.`;
+    // Step 1: Generate story text using DeepSeek with retry mechanism
+    console.log('Generating story text with DeepSeek...');
     
     const storyHeaders: PicaHeaders = {
       'Content-Type': 'application/json',
       'x-pica-secret': PICA_SECRET_KEY,
-      'x-pica-connection-key': PICA_OPENAI_CONNECTION_KEY,
-      'x-pica-action-id': 'conn_mod_def::GDzgIxPFYP0::2bW4lQ29TAuimPnr1tYXww'
+      'x-pica-connection-key': PICA_DEEP_SEEK_CONNECTION_KEY,
+      'x-pica-action-id': 'conn_mod_def::GEYc3afgC_A::5nh1q4r1TXmnKpPfurNEIA'
     };
 
-    const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/completions', {
+    const userPrompt = `Write a short, child-friendly story in ${language} about a ${character} in a ${theme} setting. ${customPrompt}. Make it magical and fun for children aged 4-10. Keep it under 500 words.`;
+
+    const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/chat/completions', {
       method: 'POST',
       headers: storyHeaders,
       body: JSON.stringify({
-        model: 'gpt-4o',
-        prompt: storyPrompt,
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are a friendly, creative assistant that writes short, child-friendly stories for a multilingual storytelling app. Always keep the language and content appropriate for children ages 4-10.' 
+          },
+          { 
+            role: 'user', 
+            content: userPrompt 
+          }
+        ],
+        model: 'deepseek-chat',
         max_tokens: 512,
         temperature: 0.8
       })
@@ -163,7 +174,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const storyData = await storyResponse.json();
-    const storyText = storyData.choices[0]?.text?.trim() || '';
+    const storyText = storyData.choices[0]?.message?.content?.trim() || '';
     
     if (!storyText) {
       throw new Error('No story text generated');
@@ -172,7 +183,7 @@ Deno.serve(async (req: Request) => {
     // Extract title from story text (first line or generate one)
     const storyLines = storyText.split('\n').filter(line => line.trim());
     let title = storyLines[0];
-    if (title.length > 100) {
+    if (title.length > 100 || title.includes('.') || title.includes('Once upon')) {
       title = `The ${character}'s ${theme} Adventure`;
     }
 
