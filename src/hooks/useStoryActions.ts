@@ -30,7 +30,7 @@ export const useStoryActions = (): UseStoryActionsReturn => {
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         return; // Already saved
@@ -93,7 +93,7 @@ export const useStoryActions = (): UseStoryActionsReturn => {
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .single();
+        .maybeSingle();
 
       return !!data;
     } catch {
