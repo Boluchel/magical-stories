@@ -28,6 +28,34 @@ interface PicaHeaders {
   'Accept'?: string;
 }
 
+// Helper function to safely extract error message from response
+function getErrorMessage(errorData: any): string {
+  if (typeof errorData === 'string') {
+    return errorData;
+  }
+  
+  if (typeof errorData === 'object' && errorData !== null) {
+    // Try common error message properties
+    if (errorData.error) {
+      return typeof errorData.error === 'string' ? errorData.error : JSON.stringify(errorData.error);
+    }
+    if (errorData.message) {
+      return errorData.message;
+    }
+    if (errorData.details) {
+      return errorData.details;
+    }
+    if (errorData.error_description) {
+      return errorData.error_description;
+    }
+    
+    // If none of the common properties exist, stringify the whole object
+    return JSON.stringify(errorData);
+  }
+  
+  return 'Unknown error';
+}
+
 // Retry mechanism with exponential backoff
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -222,21 +250,38 @@ Deno.serve(async (req: Request) => {
     }, 3);
 
     if (!storyResponse.ok) {
-      const errorData = await storyResponse.json().catch(() => ({}));
+      let errorMessage = `HTTP ${storyResponse.status}: ${storyResponse.statusText}`;
+      
+      try {
+        const errorData = await storyResponse.json();
+        const detailedError = getErrorMessage(errorData);
+        errorMessage += ` - ${detailedError}`;
+      } catch (parseError) {
+        // If we can't parse the JSON, try to get text
+        try {
+          const errorText = await storyResponse.text();
+          if (errorText) {
+            errorMessage += ` - ${errorText}`;
+          }
+        } catch (textError) {
+          // If we can't get text either, just use the status
+          errorMessage += ' - Unable to parse error details';
+        }
+      }
       
       // Handle specific error cases
       if (storyResponse.status === 402) {
         throw new Error("AI service billing issue: Please check your PicaOS account credits or subscription status.");
       }
       
-      throw new Error(`Story generation failed: ${storyResponse.statusText} - ${errorData.error || ''}`);
+      throw new Error(`Story generation failed: ${errorMessage}`);
     }
 
     const storyData = await storyResponse.json();
     storyText = storyData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     
     if (!storyText) {
-      throw new Error('No story text generated');
+      throw new Error('No story text generated from API response');
     }
 
     // Extract title from story text (first line or generate one)
@@ -298,7 +343,7 @@ Deno.serve(async (req: Request) => {
         console.warn('Audio generation failed, continuing without audio');
       }
     } catch (error) {
-      console.warn('Audio generation failed, continuing without audio:', error.message);
+      console.warn('Audio generation failed, continuing without audio:', error?.message || error);
       // Don't fail the entire request if audio generation fails
     }
 
@@ -371,7 +416,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: "Story generation failed", 
-        details: error.message 
+        details: error?.message || 'Unknown error occurred'
       }),
       {
         status: 500,
