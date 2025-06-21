@@ -2,7 +2,7 @@
   # Generate Story Edge Function
   
   This function handles the story generation pipeline:
-  1. Generate story text using DeepSeek via Pica
+  1. Generate story text using Gemini via Pica
   2. Generate audio narration using ElevenLabs via Pica
   3. Save the complete story to Supabase
 */
@@ -23,8 +23,9 @@ interface StoryRequest {
 interface PicaHeaders {
   'x-pica-secret': string;
   'x-pica-connection-key': string;
+  'x-pica-action-id'?: string;
   'Content-Type': string;
-  'Accept': string;
+  'Accept'?: string;
 }
 
 // Retry mechanism with exponential backoff
@@ -132,10 +133,10 @@ Deno.serve(async (req: Request) => {
 
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
-    const PICA_DEEP_SEEK_CONNECTION_KEY = Deno.env.get('PICA_DEEP_SEEK_CONNECTION_KEY');
+    const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
     const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
-    if (!PICA_SECRET_KEY || !PICA_DEEP_SEEK_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
+    if (!PICA_SECRET_KEY || !PICA_GEMINI_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
       return new Response(
         JSON.stringify({ error: "Missing API configuration" }),
         {
@@ -145,30 +146,31 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Step 1: Generate story text using DeepSeek with new API format
-    console.log('Generating story text with DeepSeek...');
+    // Step 1: Generate story text using Gemini with new API format
+    console.log('Generating story text with Gemini...');
     
     const storyHeaders: PicaHeaders = {
       'x-pica-secret': PICA_SECRET_KEY,
-      'x-pica-connection-key': PICA_DEEP_SEEK_CONNECTION_KEY,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'x-pica-connection-key': PICA_GEMINI_CONNECTION_KEY,
+      'x-pica-action-id': 'conn_mod_def::GCmd5BQE388::PISTzTbvRSqXx0N0rMa-Lw',
+      'Content-Type': 'application/json'
     };
 
     const systemPrompt = `You are a friendly AI that writes short, engaging, and age-appropriate stories for children. The story should be in ${language} and feature a ${character} in a ${theme} setting. ${customPrompt || ''}`;
     const userPrompt = `Please write a story for a child in ${language} about a ${character} in a ${theme} adventure. ${customPrompt || ''}`;
 
-    const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/chat/completions', {
+    const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/models/gemini-1.5-flash:generateContent', {
       method: 'POST',
       headers: storyHeaders,
       body: JSON.stringify({
-        messages: [
-          { content: systemPrompt, role: 'system' },
-          { content: userPrompt, role: 'user' }
+        contents: [
+          { parts: [{ text: systemPrompt }] },
+          { parts: [{ text: userPrompt }] }
         ],
-        model: 'deepseek-chat',
-        max_tokens: 1024,
-        temperature: 1.5
+        generationConfig: {
+          maxOutputTokens: 1024,
+          temperature: 0.8
+        }
       })
     }, 3);
 
@@ -184,7 +186,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const storyData = await storyResponse.json();
-    const storyText = storyData.choices[0]?.message?.content?.trim() || '';
+    const storyText = storyData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     
     if (!storyText) {
       throw new Error('No story text generated');
@@ -221,8 +223,7 @@ Deno.serve(async (req: Request) => {
       const audioHeaders: PicaHeaders = {
         'x-pica-secret': PICA_SECRET_KEY,
         'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Content-Type': 'application/json'
       };
 
       const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
