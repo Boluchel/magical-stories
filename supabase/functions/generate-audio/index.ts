@@ -2,6 +2,7 @@
   # Generate Audio Edge Function
   
   This function generates audio narration for stories using ElevenLabs via PicaOS
+  with graceful error handling and fallback behavior
 */
 
 const corsHeaders = {
@@ -52,7 +53,10 @@ Deno.serve(async (req: Request) => {
 
     if (!PICA_SECRET_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
       return new Response(
-        JSON.stringify({ error: "Audio generation service not configured" }),
+        JSON.stringify({ 
+          error: "Audio generation service not configured",
+          userMessage: "Audio generation is currently unavailable. Please check your API configuration."
+        }),
         {
           status: 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -87,7 +91,33 @@ Deno.serve(async (req: Request) => {
 
     if (!audioResponse.ok) {
       const errorText = await audioResponse.text();
-      throw new Error(`Audio generation failed: ${audioResponse.statusText} - ${errorText}`);
+      let userMessage = "Audio generation is temporarily unavailable. Please try again later.";
+      
+      // Parse error details for better user messaging
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.detail?.message?.includes("Free Tier usage disabled")) {
+          userMessage = "Audio generation service has reached its usage limit. Please contact support or try again later.";
+        } else if (errorData.detail?.message?.includes("Unauthorized")) {
+          userMessage = "Audio generation service authentication failed. Please contact support.";
+        }
+      } catch (parseError) {
+        // Use default message if parsing fails
+      }
+      
+      console.error(`Audio generation failed: ${audioResponse.status} - ${errorText}`);
+      
+      return new Response(
+        JSON.stringify({ 
+          error: "Audio generation failed",
+          userMessage: userMessage,
+          details: `HTTP ${audioResponse.status}: ${audioResponse.statusText}`
+        }),
+        {
+          status: audioResponse.status === 401 ? 503 : audioResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Return the audio blob directly
@@ -108,6 +138,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: "Audio generation failed", 
+        userMessage: "Audio generation is temporarily unavailable. Please try again later.",
         details: error?.message || 'Unknown error occurred'
       }),
       {

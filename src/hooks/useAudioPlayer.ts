@@ -118,10 +118,34 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate audio');
+        // Try to get user-friendly error message from response
+        let errorMessage = 'Failed to generate audio';
+        try {
+          const errorData = await response.json();
+          if (errorData.userMessage) {
+            errorMessage = errorData.userMessage;
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (parseError) {
+          // If we can't parse the error, use a generic message
+          if (response.status === 503) {
+            errorMessage = 'Audio generation service is temporarily unavailable. Please try again later.';
+          } else if (response.status === 401 || response.status === 403) {
+            errorMessage = 'Audio generation service authentication failed. Please contact support.';
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const audioBlob = await response.blob();
+      
+      // Check if we actually got audio data
+      if (audioBlob.size === 0) {
+        throw new Error('No audio data received from the service');
+      }
+      
       const audioUrl = URL.createObjectURL(audioBlob);
 
       // Create new audio element
@@ -147,8 +171,20 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
 
       // Wait for audio to load
       await new Promise((resolve, reject) => {
-        audio.addEventListener('canplaythrough', resolve);
-        audio.addEventListener('error', reject);
+        const timeout = setTimeout(() => {
+          reject(new Error('Audio loading timeout'));
+        }, 10000); // 10 second timeout
+
+        audio.addEventListener('canplaythrough', () => {
+          clearTimeout(timeout);
+          resolve(undefined);
+        });
+        
+        audio.addEventListener('error', () => {
+          clearTimeout(timeout);
+          reject(new Error('Audio loading failed'));
+        });
+        
         audio.load();
       });
 
