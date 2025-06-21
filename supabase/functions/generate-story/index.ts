@@ -297,18 +297,6 @@ Deno.serve(async (req: Request) => {
     console.log('Generating audio narration...');
     
     try {
-      // Map language to language code
-      const languageCodes: { [key: string]: string } = {
-        'english': 'en',
-        'spanish': 'es',
-        'french': 'fr',
-        'german': 'de',
-        'italian': 'it',
-        'portuguese': 'pt'
-      };
-
-      const languageCode = languageCodes[language.toLowerCase()] || 'en';
-      
       // Use a default child-friendly voice ID (you may need to adjust this)
       // Common ElevenLabs child-friendly voice IDs:
       const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
@@ -326,7 +314,6 @@ Deno.serve(async (req: Request) => {
           text: storyText,
           voice_id: childFriendlyVoiceId,
           model_id: 'eleven_monolingual_v1',
-          language_code: languageCode,
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.8,

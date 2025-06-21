@@ -60,18 +60,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Map language to language code
-    const languageCodes: { [key: string]: string } = {
-      'english': 'en',
-      'spanish': 'es',
-      'french': 'fr',
-      'german': 'de',
-      'italian': 'it',
-      'portuguese': 'pt'
-    };
-
-    const languageCode = languageCodes[language.toLowerCase()] || 'en';
-    
     // Use a child-friendly voice ID
     const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
     
@@ -88,7 +76,6 @@ Deno.serve(async (req: Request) => {
         text: text,
         voice_id: childFriendlyVoiceId,
         model_id: 'eleven_monolingual_v1',
-        language_code: languageCode,
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.8,
