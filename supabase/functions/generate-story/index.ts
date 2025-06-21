@@ -222,7 +222,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Step 1: Generate story text using Gemini with new API format
+    // Step 1: Generate story text using Gemini with correct API format
     console.log('Generating story text with Gemini...');
     
     const storyHeaders: PicaHeaders = {
@@ -231,16 +231,18 @@ Deno.serve(async (req: Request) => {
       'Content-Type': 'application/json'
     };
 
-    const systemPrompt = `You are a friendly AI that writes short, engaging, and age-appropriate stories for children. The story should be in ${language} and feature a ${character} in a ${theme} setting. ${customPrompt || ''}`;
-    const userPrompt = `Please write a story for a child in ${language} about a ${character} in a ${theme} adventure. ${customPrompt || ''}`;
+    // Combine system and user prompts into a single user message
+    const combinedPrompt = `You are a friendly AI that writes short, engaging, and age-appropriate stories for children. Please write a story for a child in ${language} about a ${character} in a ${theme} adventure. ${customPrompt ? `Additional requirements: ${customPrompt}` : ''}`;
 
     const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/models/gemini-1.5-flash:generateContent', {
       method: 'POST',
       headers: storyHeaders,
       body: JSON.stringify({
         contents: [
-          { parts: [{ text: systemPrompt }] },
-          { parts: [{ text: userPrompt }] }
+          {
+            role: "user",
+            parts: [{ text: combinedPrompt }]
+          }
         ],
         generationConfig: {
           maxOutputTokens: 1024,
