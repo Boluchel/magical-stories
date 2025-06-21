@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Wand2, Star, Hexagon as Dragon, Loader2 } from 'lucide-react';
+import { Sparkles, Wand2, Star, Hexagon as Dragon, Loader2, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useStoryGeneration } from '../hooks/useStoryGeneration';
@@ -9,7 +9,7 @@ const StoryPromptInput = () => {
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
   const { user } = useAuth();
-  const { generateStory, loading, error } = useStoryGeneration();
+  const { generateStory, loading, error, warning } = useStoryGeneration();
   
   const [formData, setFormData] = useState({
     theme: '',
@@ -141,6 +141,17 @@ const StoryPromptInput = () => {
             Choose your adventure details and let AI create magic! ✨
           </p>
         </div>
+
+        {/* Warning Display */}
+        {warning && (
+          <div className="mb-6 bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded-xl max-w-2xl mx-auto flex items-start">
+            <AlertTriangle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Demo Mode</p>
+              <p className="text-sm">{warning}</p>
+            </div>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (

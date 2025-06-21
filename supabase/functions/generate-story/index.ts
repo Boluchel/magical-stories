@@ -88,6 +88,25 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries: num
   }, maxRetries);
 }
 
+// Generate a mock story for development/testing when API keys are missing
+function generateMockStory(theme: string, character: string, language: string, customPrompt: string): string {
+  const storyTemplates = {
+    english: {
+      dragons: `Once upon a time, there was a brave ${character} who discovered a friendly dragon in an enchanted forest. Together, they went on magical adventures and learned the importance of friendship. ${customPrompt ? `The adventure included: ${customPrompt}` : ''} The end.`,
+      space: `In a galaxy far away, a curious ${character} built a rocket ship and traveled to distant planets. They met alien friends and discovered amazing new worlds filled with wonder. ${customPrompt ? `During their journey: ${customPrompt}` : ''} They returned home with incredible stories to tell.`,
+      fairies: `In a magical garden, a kind ${character} met a group of tiny fairies who needed help saving their flower kingdom. With courage and kindness, they worked together to restore the garden's magic. ${customPrompt ? `Their quest involved: ${customPrompt}` : ''} Everyone lived happily ever after.`,
+      pirates: `On the seven seas, a daring ${character} joined a crew of friendly pirates searching for treasure. They sailed through storms and solved riddles to find the greatest treasure of all - friendship. ${customPrompt ? `Their adventure included: ${customPrompt}` : ''} They shared their treasure with everyone.`,
+      animals: `In a peaceful forest, a gentle ${character} became friends with all the woodland animals. They helped solve problems and learned that working together makes everything better. ${customPrompt ? `Their story featured: ${customPrompt}` : ''} The forest was filled with joy and laughter.`,
+      underwater: `Deep beneath the ocean waves, an adventurous ${character} discovered a beautiful underwater kingdom. They swam with dolphins and helped protect the coral reef from danger. ${customPrompt ? `Their underwater adventure: ${customPrompt}` : ''} The sea creatures celebrated their new hero.`
+    }
+  };
+
+  const template = storyTemplates.english[theme as keyof typeof storyTemplates.english] || 
+    `A wonderful ${character} had an amazing ${theme} adventure filled with excitement and discovery. ${customPrompt || ''} It was a story they would never forget.`;
+
+  return template;
+}
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
@@ -136,11 +155,40 @@ Deno.serve(async (req: Request) => {
     const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
     const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
-    if (!PICA_SECRET_KEY || !PICA_GEMINI_CONNECTION_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
+    // Check if API keys are configured
+    const hasApiKeys = PICA_SECRET_KEY && PICA_GEMINI_CONNECTION_KEY && PICA_ELEVENLABS_CONNECTION_KEY;
+
+    let storyText: string;
+    let title: string;
+    let audioUrl = '';
+
+    if (!hasApiKeys) {
+      console.warn('API keys not configured, using mock story generation');
+      
+      // Generate mock story for development/testing
+      storyText = generateMockStory(theme, character, language, customPrompt);
+      title = `The ${character}'s ${theme} Adventure`;
+      
+      // Return early with mock data and helpful error message
       return new Response(
-        JSON.stringify({ error: "Missing API configuration" }),
+        JSON.stringify({
+          success: true,
+          story: {
+            id: crypto.randomUUID(),
+            title: title,
+            theme: theme,
+            character: character,
+            language: language,
+            customPrompt: customPrompt,
+            storyText: storyText,
+            imageUrl: null,
+            audioUrl: null,
+            createdAt: new Date().toISOString()
+          },
+          warning: "This is a demo story. To generate AI-powered stories, please configure the PicaOS API keys in your Supabase Edge Function settings."
+        }),
         {
-          status: 500,
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
@@ -186,7 +234,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const storyData = await storyResponse.json();
-    const storyText = storyData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    storyText = storyData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     
     if (!storyText) {
       throw new Error('No story text generated');
@@ -194,7 +242,7 @@ Deno.serve(async (req: Request) => {
 
     // Extract title from story text (first line or generate one)
     const storyLines = storyText.split('\n').filter(line => line.trim());
-    let title = storyLines[0];
+    title = storyLines[0];
     if (title.length > 100 || title.includes('.') || title.includes('Once upon')) {
       title = `The ${character}'s ${theme} Adventure`;
     }
@@ -202,7 +250,6 @@ Deno.serve(async (req: Request) => {
     // Step 2: Generate audio narration with ElevenLabs
     console.log('Generating audio narration...');
     
-    let audioUrl = '';
     try {
       // Map language to language code
       const languageCodes: { [key: string]: string } = {

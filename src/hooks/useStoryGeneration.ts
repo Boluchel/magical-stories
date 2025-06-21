@@ -25,11 +25,13 @@ interface UseStoryGenerationReturn {
   generateStory: (request: StoryGenerationRequest) => Promise<GeneratedStory>;
   loading: boolean;
   error: string | null;
+  warning: string | null;
 }
 
 export const useStoryGeneration = (): UseStoryGenerationReturn => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const { session } = useAuth();
 
   const generateStory = async (request: StoryGenerationRequest): Promise<GeneratedStory> => {
@@ -39,6 +41,7 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
 
     setLoading(true);
     setError(null);
+    setWarning(null);
 
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-story`, {
@@ -65,6 +68,11 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
         throw new Error(errorMessage);
       }
 
+      // Check for warnings (like demo mode)
+      if (data.warning) {
+        setWarning(data.warning);
+      }
+
       return data.story;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -79,5 +87,6 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
     generateStory,
     loading,
     error,
+    warning,
   };
 };
