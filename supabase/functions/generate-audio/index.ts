@@ -1,0 +1,132 @@
+/*
+  # Generate Audio Edge Function
+  
+  This function generates audio narration for stories using ElevenLabs via PicaOS
+*/
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+interface AudioRequest {
+  text: string;
+  language: string;
+}
+
+Deno.serve(async (req: Request) => {
+  try {
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        status: 200,
+        headers: corsHeaders,
+      });
+    }
+
+    if (req.method !== "POST") {
+      return new Response(
+        JSON.stringify({ error: "Method not allowed" }),
+        {
+          status: 405,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const { text, language }: AudioRequest = await req.json();
+
+    if (!text || !language) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: text, language" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Environment variables
+    const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
+    const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
+
+    if (!PICA_SECRET_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Audio generation service not configured" }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Map language to language code
+    const languageCodes: { [key: string]: string } = {
+      'english': 'en',
+      'spanish': 'es',
+      'french': 'fr',
+      'german': 'de',
+      'italian': 'it',
+      'portuguese': 'pt'
+    };
+
+    const languageCode = languageCodes[language.toLowerCase()] || 'en';
+    
+    // Use a child-friendly voice ID
+    const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
+    
+    const audioHeaders = {
+      'x-pica-secret': PICA_SECRET_KEY,
+      'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+      'Content-Type': 'application/json'
+    };
+
+    const audioResponse = await fetch(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
+      method: 'POST',
+      headers: audioHeaders,
+      body: JSON.stringify({
+        text: text,
+        voice_id: childFriendlyVoiceId,
+        model_id: 'eleven_monolingual_v1',
+        language_code: languageCode,
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.8,
+          style: 0.3,
+          use_speaker_boost: true
+        }
+      })
+    });
+
+    if (!audioResponse.ok) {
+      const errorText = await audioResponse.text();
+      throw new Error(`Audio generation failed: ${audioResponse.statusText} - ${errorText}`);
+    }
+
+    // Return the audio blob directly
+    const audioBlob = await audioResponse.blob();
+    
+    return new Response(audioBlob, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "audio/mpeg",
+        "Content-Disposition": "attachment; filename=story-narration.mp3"
+      },
+    });
+
+  } catch (error) {
+    console.error('Audio generation error:', error);
+    
+    return new Response(
+      JSON.stringify({ 
+        error: "Audio generation failed", 
+        details: error?.message || 'Unknown error occurred'
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});

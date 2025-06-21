@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Pause, RotateCcw, Heart, Share2, Volume2, ArrowLeft } from 'lucide-react';
+import { Heart, Share2, ArrowLeft, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useStoryActions } from '../hooks/useStoryActions';
+import { useAudioPlayer } from '../hooks/useAudioPlayer';
+import AudioPlayer from '../components/AudioPlayer';
 
 interface Story {
   id: string;
@@ -22,8 +25,23 @@ const StoryDisplay = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [story, setStory] = useState<Story | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+
+  const { saveStory, unsaveStory, checkIfSaved } = useStoryActions();
+  const {
+    isPlaying,
+    currentTime,
+    duration,
+    progress,
+    play,
+    pause,
+    stop,
+    seek,
+    generateAndPlayAudio,
+    loading: audioLoading,
+    error: audioError,
+  } = useAudioPlayer();
 
   useEffect(() => {
     const currentStory = localStorage.getItem('currentStory');
@@ -31,6 +49,11 @@ const StoryDisplay = () => {
       try {
         const parsedStory = JSON.parse(currentStory);
         setStory(parsedStory);
+        
+        // Check if story is saved
+        if (user && parsedStory.id) {
+          checkIfSaved(parsedStory.id).then(setIsSaved);
+        }
       } catch (error) {
         console.error('Error parsing story data:', error);
         navigate('/create');
@@ -38,17 +61,27 @@ const StoryDisplay = () => {
     } else {
       navigate('/create');
     }
-  }, [navigate]);
+  }, [navigate, user, checkIfSaved]);
 
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-    // In a real app, this would control actual audio playback
-    // For now, we'll simulate audio playback
-  };
+  const handleSave = async () => {
+    if (!story || !user) return;
 
-  const handleSave = () => {
-    setIsSaved(!isSaved);
-    // In a real app, this would save to user's favorites
+    try {
+      setSaveLoading(true);
+      
+      if (isSaved) {
+        await unsaveStory(story.id);
+        setIsSaved(false);
+      } else {
+        await saveStory(story.id);
+        setIsSaved(true);
+      }
+    } catch (error) {
+      console.error('Error saving story:', error);
+      alert('Failed to save story. Please try again.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const handleShare = () => {
@@ -68,6 +101,16 @@ const StoryDisplay = () => {
     }
   };
 
+  const handleGenerateAudio = async () => {
+    if (!story) return;
+    
+    try {
+      await generateAndPlayAudio(story.storyText, story.language);
+    } catch (error) {
+      console.error('Failed to generate audio:', error);
+    }
+  };
+
   if (!story) {
     return (
       <div className={`min-h-screen px-4 py-8 flex items-center justify-center transition-colors duration-300 ${
@@ -80,6 +123,7 @@ const StoryDisplay = () => {
             ? 'bg-gray-800/80 border-purple-400' 
             : 'bg-white/80 border-purple-100'
         }`}>
+          <Loader2 className="w-12 h-12 text-purple-500 mx-auto mb-4 animate-spin" />
           <h2 className={`text-3xl font-bold mb-4 transition-colors duration-300 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-800'
           }`}>Loading Your Story...</h2>
@@ -87,6 +131,8 @@ const StoryDisplay = () => {
       </div>
     );
   }
+
+  const hasAudio = story.audioUrl === 'audio_generated' || duration > 0;
 
   return (
     <div className={`min-h-screen px-4 py-8 transition-colors duration-300 ${
@@ -145,69 +191,21 @@ const StoryDisplay = () => {
                 ))}
               </div>
 
-              {/* Audio Controls */}
-              <div className={`rounded-2xl p-6 border-2 transition-colors duration-300 ${
-                isDarkMode 
-                  ? 'bg-purple-900/50 border-purple-400' 
-                  : 'bg-purple-50 border-purple-200'
-              }`}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-2">
-                    <Volume2 className={`w-5 h-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
-                    <span className={`font-medium transition-colors duration-300 ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                    }`}>Story Narration</span>
-                  </div>
-                  <span className={`text-sm transition-colors duration-300 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>ElevenLabs AI Voice</span>
-                </div>
-                
-                <div className="flex items-center space-x-4">
-                  <button
-                    onClick={handlePlayPause}
-                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-                      isPlaying
-                        ? 'bg-red-500 hover:bg-red-600'
-                        : 'bg-green-500 hover:bg-green-600'
-                    }`}
-                  >
-                    {isPlaying ? (
-                      <Pause className="w-6 h-6 text-white" />
-                    ) : (
-                      <Play className="w-6 h-6 text-white ml-1" />
-                    )}
-                  </button>
-                  
-                  <div className={`flex-1 rounded-full h-2 transition-colors duration-300 ${
-                    isDarkMode ? 'bg-purple-800' : 'bg-purple-200'
-                  }`}>
-                    <div 
-                      className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: isPlaying ? '45%' : '0%' }}
-                    ></div>
-                  </div>
-                  
-                  <button
-                    onClick={() => setIsPlaying(false)}
-                    className={`p-2 rounded-full transition-all duration-300 ${
-                      isDarkMode 
-                        ? 'bg-purple-800 hover:bg-purple-700' 
-                        : 'bg-purple-200 hover:bg-purple-300'
-                    }`}
-                  >
-                    <RotateCcw className={`w-5 h-5 ${isDarkMode ? 'text-purple-300' : 'text-purple-700'}`} />
-                  </button>
-                </div>
-
-                {story.audioUrl === 'audio_generated' && (
-                  <p className={`text-xs mt-2 transition-colors duration-300 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                    ✨ Audio narration was generated for this story!
-                  </p>
-                )}
-              </div>
+              {/* Audio Player */}
+              <AudioPlayer
+                isPlaying={isPlaying}
+                currentTime={currentTime}
+                duration={duration}
+                progress={progress}
+                loading={audioLoading}
+                error={audioError}
+                onPlay={play}
+                onPause={pause}
+                onStop={stop}
+                onSeek={seek}
+                onGenerateAudio={handleGenerateAudio}
+                hasAudio={hasAudio}
+              />
             </div>
 
             {/* Story Image */}
@@ -245,19 +243,38 @@ const StoryDisplay = () => {
 
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={handleSave}
-                  className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
-                    isSaved
-                      ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-                      : isDarkMode
+                {user ? (
+                  <button
+                    onClick={handleSave}
+                    disabled={saveLoading}
+                    className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isSaved
+                        ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+                        : isDarkMode
+                          ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
+                          : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
+                    }`}
+                  >
+                    {saveLoading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                    )}
+                    <span>{saveLoading ? 'Saving...' : isSaved ? 'Saved!' : 'Save Story'}</span>
+                  </button>
+                ) : (
+                  <Link
+                    to="/auth"
+                    className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                      isDarkMode
                         ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
                         : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
-                  }`}
-                >
-                  <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                  <span>{isSaved ? 'Saved!' : 'Save Story'}</span>
-                </button>
+                    }`}
+                  >
+                    <Heart className="w-5 h-5" />
+                    <span>Login to Save</span>
+                  </Link>
+                )}
 
                 <button
                   onClick={handleShare}

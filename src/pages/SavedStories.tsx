@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Heart, Trash2, Plus, BookOpen, Loader2 } from 'lucide-react';
+import { Play, Heart, Trash2, Plus, BookOpen, Loader2, Volume2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useStories } from '../hooks/useStories';
