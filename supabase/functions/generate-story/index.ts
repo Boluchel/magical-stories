@@ -200,7 +200,6 @@ Deno.serve(async (req: Request) => {
     const storyHeaders: PicaHeaders = {
       'x-pica-secret': PICA_SECRET_KEY,
       'x-pica-connection-key': PICA_GEMINI_CONNECTION_KEY,
-      'x-pica-action-id': 'conn_mod_def::GCmd5BQE388::PISTzTbvRSqXx0N0rMa-Lw',
       'Content-Type': 'application/json'
     };
 
