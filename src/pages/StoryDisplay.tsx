@@ -52,7 +52,7 @@ const StoryDisplay = () => {
         
         // Check if story is saved
         if (user && parsedStory.id) {
-          checkIfSaved(parsedStory.id).then(setIsSaved);
+          checkIfSaved(parsedStory.id).then(setIsSaved).catch(console.error);
         }
       } catch (error) {
         console.error('Error parsing story data:', error);
@@ -64,7 +64,12 @@ const StoryDisplay = () => {
   }, [navigate, user, checkIfSaved]);
 
   const handleSave = async () => {
-    if (!story || !user) return;
+    if (!story || !user) {
+      if (!user) {
+        navigate('/auth');
+      }
+      return;
+    }
 
     try {
       setSaveLoading(true);
@@ -243,38 +248,24 @@ const StoryDisplay = () => {
 
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-4">
-                {user ? (
-                  <button
-                    onClick={handleSave}
-                    disabled={saveLoading}
-                    className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      isSaved
-                        ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-                        : isDarkMode
-                          ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
-                          : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
-                    }`}
-                  >
-                    {saveLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                    )}
-                    <span>{saveLoading ? 'Saving...' : isSaved ? 'Saved!' : 'Save Story'}</span>
-                  </button>
-                ) : (
-                  <Link
-                    to="/auth"
-                    className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
-                      isDarkMode
+                <button
+                  onClick={handleSave}
+                  disabled={saveLoading}
+                  className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isSaved
+                      ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+                      : isDarkMode
                         ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
                         : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
-                    }`}
-                  >
-                    <Heart className="w-5 h-5" />
-                    <span>Login to Save</span>
-                  </Link>
-                )}
+                  }`}
+                >
+                  {saveLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                  )}
+                  <span>{saveLoading ? 'Saving...' : isSaved ? 'Saved!' : user ? 'Save Story' : 'Login to Save'}</span>
+                </button>
 
                 <button
                   onClick={handleShare}

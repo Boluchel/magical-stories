@@ -108,10 +108,12 @@ export const useStories = (): UseStoriesReturn => {
       }
 
       // Transform the data to match our SavedStory interface
-      const transformedData = (data || []).map(item => ({
-        ...item.stories,
-        saved_at: item.created_at
-      })) as SavedStory[];
+      const transformedData = (data || [])
+        .filter(item => item.stories) // Filter out any null stories
+        .map(item => ({
+          ...item.stories,
+          saved_at: item.created_at
+        })) as SavedStory[];
 
       setSavedStories(transformedData);
     } catch (err) {
@@ -126,7 +128,8 @@ export const useStories = (): UseStoriesReturn => {
       const { error: deleteError } = await supabase
         .from('stories')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user?.id); // Ensure user can only delete their own stories
 
       if (deleteError) {
         throw deleteError;
@@ -146,6 +149,23 @@ export const useStories = (): UseStoriesReturn => {
     if (!user) return;
 
     try {
+      // Check if already saved
+      const { data: existing, error: checkError } = await supabase
+        .from('saved_stories')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('story_id', storyId)
+        .single();
+
+      // If checkError is not null but it's just "no rows", that's fine
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
+
+      if (existing) {
+        return; // Already saved
+      }
+
       const { error: saveError } = await supabase
         .from('saved_stories')
         .insert({

@@ -24,18 +24,24 @@ export const useStoryActions = (): UseStoryActionsReturn => {
       setLoading(true);
       setError(null);
 
-      // Check if already saved
-      const { data: existing } = await supabase
+      // Check if already saved first
+      const { data: existing, error: checkError } = await supabase
         .from('saved_stories')
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .maybeSingle();
+        .single();
+
+      // If checkError is not null but it's just "no rows", that's fine
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
 
       if (existing) {
         return; // Already saved
       }
 
+      // Insert the saved story
       const { error: saveError } = await supabase
         .from('saved_stories')
         .insert({
@@ -88,15 +94,26 @@ export const useStoryActions = (): UseStoryActionsReturn => {
     }
 
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('saved_stories')
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .maybeSingle();
+        .single();
+
+      // If error is "no rows found", that means it's not saved
+      if (error && error.code === 'PGRST116') {
+        return false;
+      }
+
+      if (error) {
+        console.error('Error checking if story is saved:', error);
+        return false;
+      }
 
       return !!data;
-    } catch {
+    } catch (err) {
+      console.error('Error checking if story is saved:', err);
       return false;
     }
   };
