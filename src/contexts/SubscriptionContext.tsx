@@ -23,6 +23,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     const initializeRevenueCat = async () => {
@@ -35,38 +36,61 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           return;
         }
 
-        // Initialize RevenueCat with your public API key
-        const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY;
-        if (!apiKey) {
-          throw new Error('RevenueCat API key not found. Please add VITE_REVENUECAT_PUBLIC_KEY to your environment variables.');
+        // Initialize RevenueCat with your public API key (only once)
+        if (!isInitialized) {
+          const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY;
+          if (!apiKey) {
+            throw new Error('RevenueCat API key not found. Please add VITE_REVENUECAT_PUBLIC_KEY to your environment variables.');
+          }
+
+          await Purchases.configure(apiKey);
+          setIsInitialized(true);
         }
 
-        await Purchases.configure(apiKey);
-
-        if (user && user.id && typeof user.id === 'string' && user.id.trim() !== '') {
-          // Identify the user
-          await Purchases.logIn(user.id);
+        // Handle user identification
+        if (user && user.id) {
+          // Ensure we have a valid string user ID
+          const userId = String(user.id).trim();
           
-          // Get customer info
-          const info = await Purchases.getCustomerInfo();
-          setCustomerInfo(info);
-          setIsSubscribed(Object.keys(info.entitlements.active).length > 0);
-
-          // Get available packages
-          const offerings = await Purchases.getOfferings();
-          if (offerings.current) {
-            setPackages(offerings.current.availablePackages);
+          if (userId && userId !== '' && userId !== 'undefined' && userId !== 'null') {
+            console.log('Identifying RevenueCat user with ID:', userId);
+            
+            // Identify the user with RevenueCat
+            await Purchases.logIn(userId);
+            
+            // Get customer info
+            const info = await Purchases.getCustomerInfo();
+            setCustomerInfo(info);
+            setIsSubscribed(Object.keys(info.entitlements.active).length > 0);
+          } else {
+            console.log('Invalid user ID, using anonymous mode');
+            // Log out to ensure we're in anonymous mode
+            await Purchases.logOut();
+            setCustomerInfo(null);
+            setIsSubscribed(false);
           }
         } else {
+          console.log('No user, using anonymous mode');
           // Explicitly log out to ensure anonymous state
           await Purchases.logOut();
-          
-          // Get available packages for anonymous users
+          setCustomerInfo(null);
+          setIsSubscribed(false);
+        }
+
+        // Get available packages (works for both authenticated and anonymous users)
+        try {
           const offerings = await Purchases.getOfferings();
           if (offerings.current) {
             setPackages(offerings.current.availablePackages);
+          } else {
+            console.log('No current offering found');
+            setPackages([]);
           }
+        } catch (offeringsError) {
+          console.warn('Failed to load offerings:', offeringsError);
+          setPackages([]);
         }
+
       } catch (err) {
         console.error('RevenueCat initialization error:', err);
         setError(err instanceof Error ? err.message : 'Failed to initialize subscription service');
@@ -76,7 +100,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
 
     initializeRevenueCat();
-  }, [user, authLoading]);
+  }, [user, authLoading, isInitialized]);
 
   const purchasePackage = async (pkg: PurchasesPackage) => {
     try {
