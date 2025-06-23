@@ -38,7 +38,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         await Purchases.configure(apiKey);
 
-        if (user) {
+        if (user && user.id && typeof user.id === 'string' && user.id.trim() !== '') {
           // Identify the user
           await Purchases.logIn(user.id);
           
