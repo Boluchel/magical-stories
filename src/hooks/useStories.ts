@@ -85,7 +85,7 @@ export const useStories = (): UseStoriesReturn => {
         .from('saved_stories')
         .select(`
           created_at,
-          stories (
+          stories!inner (
             id,
             title,
             theme,
@@ -124,12 +124,16 @@ export const useStories = (): UseStoriesReturn => {
   };
 
   const deleteStory = async (id: string) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
     try {
       const { error: deleteError } = await supabase
         .from('stories')
         .delete()
         .eq('id', id)
-        .eq('user_id', user?.id); // Ensure user can only delete their own stories
+        .eq('user_id', user.id); // Ensure user can only delete their own stories
 
       if (deleteError) {
         throw deleteError;
@@ -146,7 +150,9 @@ export const useStories = (): UseStoriesReturn => {
   };
 
   const saveStory = async (storyId: string) => {
-    if (!user) return;
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
 
     try {
       // Check if already saved
@@ -155,9 +161,8 @@ export const useStories = (): UseStoriesReturn => {
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .single();
+        .maybeSingle();
 
-      // If checkError is not null but it's just "no rows", that's fine
       if (checkError && checkError.code !== 'PGRST116') {
         throw checkError;
       }
@@ -187,7 +192,9 @@ export const useStories = (): UseStoriesReturn => {
   };
 
   const unsaveStory = async (storyId: string) => {
-    if (!user) return;
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
 
     try {
       const { error: unsaveError } = await supabase

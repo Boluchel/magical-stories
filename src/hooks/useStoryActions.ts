@@ -30,9 +30,8 @@ export const useStoryActions = (): UseStoryActionsReturn => {
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .single();
+        .maybeSingle();
 
-      // If checkError is not null but it's just "no rows", that's fine
       if (checkError && checkError.code !== 'PGRST116') {
         throw checkError;
       }
@@ -99,14 +98,9 @@ export const useStoryActions = (): UseStoryActionsReturn => {
         .select('id')
         .eq('user_id', user.id)
         .eq('story_id', storyId)
-        .single();
+        .maybeSingle();
 
-      // If error is "no rows found", that means it's not saved
-      if (error && error.code === 'PGRST116') {
-        return false;
-      }
-
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.error('Error checking if story is saved:', error);
         return false;
       }
