@@ -74,43 +74,60 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           return;
         }
 
-        // Initialize RevenueCat with your public API key (only once)
+        // Initialize RevenueCat with proper configuration (only once)
         if (!isInitialized) {
           const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY;
           if (!apiKey) {
             throw new Error('RevenueCat API key not found. Please add VITE_REVENUECAT_PUBLIC_KEY to your environment variables.');
           }
 
-          await Purchases.configure(apiKey);
+          // Determine user ID for initial configuration
+          let appUserId = null;
+          if (user && user.id) {
+            const userId = String(user.id).trim();
+            if (userId && userId !== '' && userId !== 'undefined' && userId !== 'null') {
+              appUserId = userId;
+            }
+          }
+
+          console.log('Configuring RevenueCat with user ID:', appUserId || 'anonymous');
+
+          // Configure RevenueCat with proper configuration object
+          await Purchases.configure({
+            apiKey: apiKey,
+            appUserId: appUserId // null for anonymous, or valid user ID
+          });
+          
           setIsInitialized(true);
+        } else {
+          // If already initialized, handle user login/logout
+          if (user && user.id) {
+            const userId = String(user.id).trim();
+            
+            if (userId && userId !== '' && userId !== 'undefined' && userId !== 'null') {
+              console.log('Logging in RevenueCat user with ID:', userId);
+              await Purchases.logIn(userId);
+            } else {
+              console.log('Invalid user ID, logging out to anonymous mode');
+              await Purchases.logOut();
+            }
+          } else {
+            console.log('No user, logging out to anonymous mode');
+            await Purchases.logOut();
+          }
         }
 
-        // Handle user identification
-        if (user && user.id) {
-          // Ensure we have a valid string user ID
-          const userId = String(user.id).trim();
-          
-          if (userId && userId !== '' && userId !== 'undefined' && userId !== 'null') {
-            console.log('Identifying RevenueCat user with ID:', userId);
-            
-            // Identify the user with RevenueCat
-            await Purchases.logIn(userId);
-            
-            // Get customer info and sync with Supabase
-            const info = await Purchases.getCustomerInfo();
-            setCustomerInfo(info);
+        // Get customer info after initialization/login
+        try {
+          const info = await Purchases.getCustomerInfo();
+          setCustomerInfo(info);
+          if (user) {
             await syncSubscriptionStatus(info);
           } else {
-            console.log('Invalid user ID, using anonymous mode');
-            // Log out to ensure we're in anonymous mode
-            await Purchases.logOut();
-            setCustomerInfo(null);
             setIsSubscribed(false);
           }
-        } else {
-          console.log('No user, using anonymous mode');
-          // Explicitly log out to ensure anonymous state
-          await Purchases.logOut();
+        } catch (customerInfoError) {
+          console.warn('Failed to get customer info:', customerInfoError);
           setCustomerInfo(null);
           setIsSubscribed(false);
         }
