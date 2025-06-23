@@ -17,7 +17,7 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
@@ -29,6 +29,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         setLoading(true);
         setError(null);
+
+        // Wait for auth loading to complete
+        if (authLoading) {
+          return;
+        }
 
         // Initialize RevenueCat with your public API key
         const apiKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY;
@@ -52,6 +57,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (offerings.current) {
             setPackages(offerings.current.availablePackages);
           }
+        } else {
+          // Explicitly log out to ensure anonymous state
+          await Purchases.logOut();
+          
+          // Get available packages for anonymous users
+          const offerings = await Purchases.getOfferings();
+          if (offerings.current) {
+            setPackages(offerings.current.availablePackages);
+          }
         }
       } catch (err) {
         console.error('RevenueCat initialization error:', err);
@@ -62,7 +76,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
 
     initializeRevenueCat();
-  }, [user]);
+  }, [user, authLoading]);
 
   const purchasePackage = async (pkg: PurchasesPackage) => {
     try {
