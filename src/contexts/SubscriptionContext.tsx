@@ -77,7 +77,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Initialize RevenueCat with Paddle configuration (only once)
         if (!isInitialized) {
           // Use the Paddle public key for RevenueCat Web
-          const paddlePublicKey = 'pdl_OxvcGNDvXAlLnPicKSRfhIXvkbHt';
+          const paddlePublicKey = 'pdl_sdbx_apikey_01jye7n5adfb5z4jpqzchwp847_Q8SM3abTbQRSQffRQHdxeQ_A2B';
           
           if (!paddlePublicKey) {
             throw new Error('Paddle public key not found. Please check your configuration.');
