@@ -2,9 +2,10 @@
   # Generate Story Edge Function
   
   This function handles the story generation pipeline:
-  1. Generate story text using Gemini via Pica
-  2. Generate audio narration using ElevenLabs via Pica
-  3. Save the complete story to Supabase
+  1. Check subscription limits
+  2. Generate story text using Gemini via Pica
+  3. Generate audio narration using ElevenLabs via Pica
+  4. Save the complete story to Supabase
 */
 
 const corsHeaders = {
@@ -178,6 +179,62 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Get user ID from JWT token
+    const token = authHeader.replace('Bearer ', '');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Supabase configuration missing');
+    }
+
+    // Get user info from token
+    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        'Authorization': authHeader,
+        'apikey': supabaseServiceKey
+      }
+    });
+
+    if (!userResponse.ok) {
+      throw new Error('Invalid authentication token');
+    }
+
+    const userData = await userResponse.json();
+    const userId = userData.id;
+
+    // Check subscription limits
+    console.log('Checking subscription limits for user:', userId);
+    const limitsResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/can_create_story`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'apikey': supabaseServiceKey,
+      },
+      body: JSON.stringify({ user_uuid: userId })
+    });
+
+    if (!limitsResponse.ok) {
+      const errorText = await limitsResponse.text();
+      throw new Error(`Failed to check subscription limits: ${errorText}`);
+    }
+
+    const limitsData = await limitsResponse.json();
+    
+    if (!limitsData.can_create) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Daily story limit reached", 
+          details: `You have created ${limitsData.daily_count} stories today. Upgrade to Premium for unlimited stories!`
+        }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
     const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
@@ -189,6 +246,7 @@ Deno.serve(async (req: Request) => {
     let storyText: string;
     let title: string;
     let audioUrl = '';
+    let generationType = 'free';
 
     if (!hasApiKeys) {
       console.warn('API keys not configured, using mock story generation');
@@ -196,157 +254,133 @@ Deno.serve(async (req: Request) => {
       // Generate mock story for development/testing
       storyText = generateMockStory(theme, character, language, customPrompt);
       title = `The ${character}'s ${theme} Adventure`;
+      generationType = 'demo';
       
-      // Return early with mock data and helpful error message
-      return new Response(
-        JSON.stringify({
-          success: true,
-          story: {
-            id: crypto.randomUUID(),
-            title: title,
-            theme: theme,
-            character: character,
-            language: language,
-            customPrompt: customPrompt,
-            storyText: storyText,
-            imageUrl: null,
-            audioUrl: null,
-            createdAt: new Date().toISOString()
-          },
-          warning: "This is a demo story. To generate AI-powered stories, please configure the PicaOS API keys in your Supabase Edge Function settings."
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+    } else {
+      // Determine generation type based on subscription
+      generationType = limitsData.is_subscribed ? 'premium' : 'free';
 
-    // Step 1: Generate story text using Gemini with correct API format
-    console.log('Generating story text with Gemini...');
-    
-    const storyHeaders: PicaHeaders = {
-      'x-pica-secret': PICA_SECRET_KEY,
-      'x-pica-connection-key': PICA_GEMINI_CONNECTION_KEY,
-      'Content-Type': 'application/json'
-    };
-
-    // Combine system and user prompts into a single user message
-    const combinedPrompt = `You are a friendly AI that writes short, engaging, and age-appropriate stories for children. Please write a story for a child in ${language} about a ${character} in a ${theme} adventure. ${customPrompt ? `Additional requirements: ${customPrompt}` : ''}`;
-
-    const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/models/gemini-1.5-flash:generateContent', {
-      method: 'POST',
-      headers: storyHeaders,
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: combinedPrompt }]
-          }
-        ],
-        generationConfig: {
-          maxOutputTokens: 1024,
-          temperature: 0.8
-        }
-      })
-    }, 3);
-
-    if (!storyResponse.ok) {
-      let errorMessage = `HTTP ${storyResponse.status}: ${storyResponse.statusText}`;
+      // Step 1: Generate story text using Gemini with correct API format
+      console.log('Generating story text with Gemini...');
       
-      try {
-        const errorData = await storyResponse.json();
-        const detailedError = getErrorMessage(errorData);
-        errorMessage += ` - ${detailedError}`;
-      } catch (parseError) {
-        // If we can't parse the JSON, try to get text
-        try {
-          const errorText = await storyResponse.text();
-          if (errorText) {
-            errorMessage += ` - ${errorText}`;
-          }
-        } catch (textError) {
-          // If we can't get text either, just use the status
-          errorMessage += ' - Unable to parse error details';
-        }
-      }
-      
-      // Handle specific error cases
-      if (storyResponse.status === 402) {
-        throw new Error("AI service billing issue: Please check your PicaOS account credits or subscription status.");
-      }
-      
-      throw new Error(`Story generation failed: ${errorMessage}`);
-    }
-
-    const storyData = await storyResponse.json();
-    storyText = storyData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    
-    if (!storyText) {
-      throw new Error('No story text generated from API response');
-    }
-
-    // Extract title from story text (first line or generate one)
-    const storyLines = storyText.split('\n').filter(line => line.trim());
-    title = storyLines[0];
-    if (title.length > 100 || title.includes('.') || title.includes('Once upon')) {
-      title = `The ${character}'s ${theme} Adventure`;
-    }
-
-    // Step 2: Generate audio narration with ElevenLabs
-    console.log('Generating audio narration...');
-    
-    try {
-      // Use a default child-friendly voice ID (you may need to adjust this)
-      // Common ElevenLabs child-friendly voice IDs:
-      const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
-      
-      const audioHeaders: PicaHeaders = {
+      const storyHeaders: PicaHeaders = {
         'x-pica-secret': PICA_SECRET_KEY,
-        'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+        'x-pica-connection-key': PICA_GEMINI_CONNECTION_KEY,
         'Content-Type': 'application/json'
       };
 
-      const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
+      // Combine system and user prompts into a single user message
+      const combinedPrompt = `You are a friendly AI that writes short, engaging, and age-appropriate stories for children. Please write a story for a child in ${language} about a ${character} in a ${theme} adventure. ${customPrompt ? `Additional requirements: ${customPrompt}` : ''}`;
+
+      const storyResponse = await fetchWithRetry('https://api.picaos.com/v1/passthrough/models/gemini-1.5-flash:generateContent', {
         method: 'POST',
-        headers: audioHeaders,
+        headers: storyHeaders,
         body: JSON.stringify({
-          text: storyText,
-          voice_id: childFriendlyVoiceId,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.8,
-            style: 0.3,
-            use_speaker_boost: true
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: combinedPrompt }]
+            }
+          ],
+          generationConfig: {
+            maxOutputTokens: 1024,
+            temperature: 0.8
           }
         })
-      }, 2);
+      }, 3);
 
-      if (audioResponse.ok) {
-        // For now, we'll store a placeholder URL since we'd need to upload the audio blob
-        // In a production app, you'd upload the audio to Supabase Storage
-        audioUrl = 'audio_generated'; // Placeholder
-        console.log('Audio generated successfully');
-      } else {
-        console.warn('Audio generation failed, continuing without audio');
+      if (!storyResponse.ok) {
+        let errorMessage = `HTTP ${storyResponse.status}: ${storyResponse.statusText}`;
+        
+        try {
+          const errorData = await storyResponse.json();
+          const detailedError = getErrorMessage(errorData);
+          errorMessage += ` - ${detailedError}`;
+        } catch (parseError) {
+          // If we can't parse the JSON, try to get text
+          try {
+            const errorText = await storyResponse.text();
+            if (errorText) {
+              errorMessage += ` - ${errorText}`;
+            }
+          } catch (textError) {
+            // If we can't get text either, just use the status
+            errorMessage += ' - Unable to parse error details';
+          }
+        }
+        
+        // Handle specific error cases
+        if (storyResponse.status === 402) {
+          throw new Error("AI service billing issue: Please check your PicaOS account credits or subscription status.");
+        }
+        
+        throw new Error(`Story generation failed: ${errorMessage}`);
       }
-    } catch (error) {
-      console.warn('Audio generation failed, continuing without audio:', error?.message || error);
-      // Don't fail the entire request if audio generation fails
+
+      const storyData = await storyResponse.json();
+      storyText = storyData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+      
+      if (!storyText) {
+        throw new Error('No story text generated from API response');
+      }
+
+      // Extract title from story text (first line or generate one)
+      const storyLines = storyText.split('\n').filter(line => line.trim());
+      title = storyLines[0];
+      if (title.length > 100 || title.includes('.') || title.includes('Once upon')) {
+        title = `The ${character}'s ${theme} Adventure`;
+      }
+
+      // Step 2: Generate audio narration with ElevenLabs (only for premium users)
+      if (limitsData.is_subscribed) {
+        console.log('Generating audio narration for premium user...');
+        
+        try {
+          // Use a default child-friendly voice ID (you may need to adjust this)
+          // Common ElevenLabs child-friendly voice IDs:
+          const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
+          
+          const audioHeaders: PicaHeaders = {
+            'x-pica-secret': PICA_SECRET_KEY,
+            'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+            'Content-Type': 'application/json'
+          };
+
+          const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
+            method: 'POST',
+            headers: audioHeaders,
+            body: JSON.stringify({
+              text: storyText,
+              voice_id: childFriendlyVoiceId,
+              model_id: 'eleven_monolingual_v1',
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.8,
+                style: 0.3,
+                use_speaker_boost: true
+              }
+            })
+          }, 2);
+
+          if (audioResponse.ok) {
+            // For now, we'll store a placeholder URL since we'd need to upload the audio blob
+            // In a production app, you'd upload the audio to Supabase Storage
+            audioUrl = 'audio_generated'; // Placeholder
+            console.log('Audio generated successfully');
+          } else {
+            console.warn('Audio generation failed, continuing without audio');
+          }
+        } catch (error) {
+          console.warn('Audio generation failed, continuing without audio:', error?.message || error);
+          // Don't fail the entire request if audio generation fails
+        }
+      } else {
+        console.log('Free user - skipping audio generation');
+      }
     }
 
     // Step 3: Save to Supabase
     console.log('Saving story to database...');
-    
-    // Get user ID from JWT token
-    const token = authHeader.replace('Bearer ', '');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Supabase configuration missing');
-    }
 
     // Insert story into database
     const insertResponse = await fetch(`${supabaseUrl}/rest/v1/stories`, {
@@ -366,7 +400,8 @@ Deno.serve(async (req: Request) => {
         story_text: storyText,
         image_url: null, // No image generation
         audio_url: audioUrl,
-        user_id: null // Will be set by RLS policy
+        generation_type: generationType,
+        user_id: userId
       })
     });
 
@@ -377,22 +412,29 @@ Deno.serve(async (req: Request) => {
 
     const savedStory = await insertResponse.json();
 
+    const response = {
+      success: true,
+      story: {
+        id: savedStory[0]?.id,
+        title: title,
+        theme: theme,
+        character: character,
+        language: language,
+        customPrompt: customPrompt,
+        storyText: storyText,
+        imageUrl: null, // No image
+        audioUrl: audioUrl,
+        createdAt: savedStory[0]?.created_at
+      }
+    };
+
+    // Add warning for demo mode
+    if (!hasApiKeys) {
+      response.warning = "This is a demo story. To generate AI-powered stories, please configure the PicaOS API keys in your Supabase Edge Function settings.";
+    }
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        story: {
-          id: savedStory[0]?.id,
-          title: title,
-          theme: theme,
-          character: character,
-          language: language,
-          customPrompt: customPrompt,
-          storyText: storyText,
-          imageUrl: null, // No image
-          audioUrl: audioUrl,
-          createdAt: savedStory[0]?.created_at
-        }
-      }),
+      JSON.stringify(response),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

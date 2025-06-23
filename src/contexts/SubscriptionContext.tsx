@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Purchases } from '@revenuecat/purchases-js';
 import type { PurchasesPackage, CustomerInfo } from '@revenuecat/purchases-js';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface SubscriptionContextType {
   isSubscribed: boolean;
@@ -24,6 +25,43 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Sync subscription status with Supabase
+  const syncSubscriptionStatus = async (info: CustomerInfo) => {
+    if (!user) return;
+
+    try {
+      const hasActiveSubscription = Object.keys(info.entitlements.active).length > 0;
+      const subscriptionType = hasActiveSubscription 
+        ? Object.keys(info.entitlements.active)[0] 
+        : null;
+      
+      // Get expiration date from the first active entitlement
+      let expiresAt = null;
+      if (hasActiveSubscription) {
+        const firstEntitlement = Object.values(info.entitlements.active)[0];
+        expiresAt = firstEntitlement.expirationDate;
+      }
+
+      // Update subscription status in Supabase
+      const { error: updateError } = await supabase
+        .rpc('update_subscription_status', {
+          user_uuid: user.id,
+          rc_user_id: info.originalAppUserId,
+          subscribed: hasActiveSubscription,
+          sub_type: subscriptionType,
+          expires: expiresAt
+        });
+
+      if (updateError) {
+        console.error('Failed to sync subscription status:', updateError);
+      }
+
+      setIsSubscribed(hasActiveSubscription);
+    } catch (err) {
+      console.error('Error syncing subscription status:', err);
+    }
+  };
 
   useEffect(() => {
     const initializeRevenueCat = async () => {
@@ -58,10 +96,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             // Identify the user with RevenueCat
             await Purchases.logIn(userId);
             
-            // Get customer info
+            // Get customer info and sync with Supabase
             const info = await Purchases.getCustomerInfo();
             setCustomerInfo(info);
-            setIsSubscribed(Object.keys(info.entitlements.active).length > 0);
+            await syncSubscriptionStatus(info);
           } else {
             console.log('Invalid user ID, using anonymous mode');
             // Log out to ensure we're in anonymous mode
@@ -109,7 +147,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const { customerInfo: updatedCustomerInfo } = await Purchases.purchasePackage(pkg);
       setCustomerInfo(updatedCustomerInfo);
-      setIsSubscribed(Object.keys(updatedCustomerInfo.entitlements.active).length > 0);
+      await syncSubscriptionStatus(updatedCustomerInfo);
     } catch (err) {
       console.error('Purchase error:', err);
       setError(err instanceof Error ? err.message : 'Purchase failed');
@@ -126,7 +164,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const info = await Purchases.restorePurchases();
       setCustomerInfo(info);
-      setIsSubscribed(Object.keys(info.entitlements.active).length > 0);
+      await syncSubscriptionStatus(info);
     } catch (err) {
       console.error('Restore purchases error:', err);
       setError(err instanceof Error ? err.message : 'Failed to restore purchases');
@@ -140,7 +178,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const info = await Purchases.getCustomerInfo();
       setCustomerInfo(info);
-      setIsSubscribed(Object.keys(info.entitlements.active).length > 0);
+      await syncSubscriptionStatus(info);
     } catch (err) {
       console.error('Refresh customer info error:', err);
       setError(err instanceof Error ? err.message : 'Failed to refresh subscription status');
