@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import * as Purchases from '@revenuecat/purchases-js';
+import Purchases from '@revenuecat/purchases-js';
 import type { PurchasesPackage, CustomerInfo } from '@revenuecat/purchases-js';
 import { useAuth } from './AuthContext';
 
