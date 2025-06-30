@@ -52,10 +52,17 @@ Deno.serve(async (req: Request) => {
     const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
     if (!PICA_SECRET_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
+      console.warn('Audio generation API keys not configured');
+      
+      // Return a mock audio response for development
+      const mockAudioText = "Audio generation is not configured. This is a demo response.";
+      const mockAudioBlob = new Blob([mockAudioText], { type: 'text/plain' });
+      
       return new Response(
         JSON.stringify({ 
           error: "Audio generation service not configured",
-          userMessage: "Audio generation is currently unavailable. Please check your API configuration."
+          userMessage: "Audio generation is currently unavailable. Please configure the PicaOS API keys to enable audio narration.",
+          demo: true
         }),
         {
           status: 503,
@@ -72,6 +79,8 @@ Deno.serve(async (req: Request) => {
       'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
       'Content-Type': 'application/json'
     };
+
+    console.log('Generating audio with ElevenLabs...');
 
     const audioResponse = await fetch(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
       method: 'POST',
@@ -100,9 +109,16 @@ Deno.serve(async (req: Request) => {
           userMessage = "Audio generation service has reached its usage limit. Please contact support or try again later.";
         } else if (errorData.detail?.message?.includes("Unauthorized")) {
           userMessage = "Audio generation service authentication failed. Please contact support.";
+        } else if (errorData.detail?.message?.includes("quota")) {
+          userMessage = "Audio generation quota exceeded. Please try again later or upgrade your plan.";
         }
       } catch (parseError) {
         // Use default message if parsing fails
+        if (audioResponse.status === 401 || audioResponse.status === 403) {
+          userMessage = "Audio generation service authentication failed. Please check your API configuration.";
+        } else if (audioResponse.status === 429) {
+          userMessage = "Too many requests. Please wait a moment and try again.";
+        }
       }
       
       console.error(`Audio generation failed: ${audioResponse.status} - ${errorText}`);
@@ -123,12 +139,29 @@ Deno.serve(async (req: Request) => {
     // Return the audio blob directly
     const audioBlob = await audioResponse.blob();
     
+    // Check if we actually got audio data
+    if (audioBlob.size === 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: "No audio data received",
+          userMessage: "Audio generation failed to produce audio. Please try again."
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    
+    console.log(`Audio generated successfully, size: ${audioBlob.size} bytes`);
+    
     return new Response(audioBlob, {
       status: 200,
       headers: {
         ...corsHeaders,
         "Content-Type": "audio/mpeg",
-        "Content-Disposition": "attachment; filename=story-narration.mp3"
+        "Content-Disposition": "attachment; filename=story-narration.mp3",
+        "Content-Length": audioBlob.size.toString()
       },
     });
 
