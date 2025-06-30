@@ -2,7 +2,7 @@
   # Generate Audio Edge Function
   
   This function generates audio narration for stories using Tavus API
-  with a pre-configured replica ID
+  with a pre-configured replica ID. Falls back gracefully when API keys are not configured.
 */
 
 const corsHeaders = {
@@ -52,13 +52,17 @@ Deno.serve(async (req: Request) => {
     const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID');
 
     if (!TAVUS_API_KEY || !TAVUS_REPLICA_ID) {
+      console.warn('Tavus API keys not configured - audio generation unavailable');
+      
+      // Return a graceful response indicating audio is not available
       return new Response(
         JSON.stringify({ 
-          error: "Audio generation service not configured",
-          userMessage: "Audio generation is currently unavailable. Please configure both TAVUS_API_KEY and TAVUS_REPLICA_ID environment variables."
+          error: "Audio generation not configured",
+          userMessage: "Audio generation is currently unavailable in demo mode. To enable audio narration, please configure the Tavus API keys.",
+          audioAvailable: false
         }),
         {
-          status: 503,
+          status: 200, // Changed from 503 to 200 to indicate this is expected behavior
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
@@ -110,7 +114,8 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ 
           error: "Audio generation failed",
           userMessage: userMessage,
-          details: `HTTP ${audioResponse.status}: ${audioResponse.statusText}`
+          details: `HTTP ${audioResponse.status}: ${audioResponse.statusText}`,
+          audioAvailable: false
         }),
         {
           status: audioResponse.status === 401 ? 503 : audioResponse.status,
@@ -147,7 +152,8 @@ Deno.serve(async (req: Request) => {
           speech_id: responseData.speech_id,
           replica_id: TAVUS_REPLICA_ID,
           message: "Audio generation started. Use the speech_id to check status.",
-          userMessage: "Audio is being generated. Please try again in a few moments."
+          userMessage: "Audio is being generated. Please try again in a few moments.",
+          audioAvailable: true
         }),
         {
           status: 202, // Accepted - processing
@@ -163,7 +169,8 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ 
         error: "Audio generation failed", 
         userMessage: "Audio generation is temporarily unavailable. Please try again later.",
-        details: error?.message || 'Unknown error occurred'
+        details: error?.message || 'Unknown error occurred',
+        audioAvailable: false
       }),
       {
         status: 500,
