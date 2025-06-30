@@ -1,62 +1,87 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface UseAudioPlayerReturn {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
   progress: number;
+  volume: number;
+  isMuted: boolean;
   play: () => Promise<void>;
   pause: () => void;
   stop: () => void;
   seek: (time: number) => void;
+  setVolume: (volume: number) => void;
+  toggleMute: () => void;
   generateAndPlayAudio: (text: string, language: string) => Promise<void>;
   loading: boolean;
   error: string | null;
+  cleanup: () => void;
 }
 
 export const useAudioPlayer = (): UseAudioPlayerReturn => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolumeState] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
-  const updateTime = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-    }
-  };
-
-  const startTimeTracking = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    intervalRef.current = setInterval(updateTime, 100);
-  };
-
-  const stopTimeTracking = () => {
+  // Cleanup function
+  const cleanup = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  };
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeEventListener('loadedmetadata', () => {});
+      audioRef.current.removeEventListener('ended', () => {});
+      audioRef.current.removeEventListener('error', () => {});
+      audioRef.current.removeEventListener('timeupdate', () => {});
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setError(null);
+  }, []);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return cleanup;
+  }, [cleanup]);
+
+  const updateTime = useCallback(() => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  }, []);
+
+  const startTimeTracking = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    intervalRef.current = setInterval(updateTime, 100);
+  }, [updateTime]);
+
+  const stopTimeTracking = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
 
   const play = async () => {
     if (audioRef.current) {
@@ -96,16 +121,36 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
     }
   };
 
+  const setVolume = (newVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, newVolume));
+    setVolumeState(clampedVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = clampedVolume;
+    }
+    if (clampedVolume > 0 && isMuted) {
+      setIsMuted(false);
+    }
+  };
+
+  const toggleMute = () => {
+    if (audioRef.current) {
+      if (isMuted) {
+        audioRef.current.volume = volume;
+        setIsMuted(false);
+      } else {
+        audioRef.current.volume = 0;
+        setIsMuted(true);
+      }
+    }
+  };
+
   const generateAndPlayAudio = async (text: string, language: string) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Stop current audio if playing
-      if (audioRef.current) {
-        stop();
-        audioRef.current = null;
-      }
+      // Clean up any existing audio
+      cleanup();
 
       // Generate audio using ElevenLabs via edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-audio`, {
@@ -147,43 +192,61 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       }
       
       const audioUrl = URL.createObjectURL(audioBlob);
+      audioUrlRef.current = audioUrl;
 
       // Create new audio element
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
 
-      // Set up event listeners
-      audio.addEventListener('loadedmetadata', () => {
-        setDuration(audio.duration);
-      });
+      // Set initial volume and mute state
+      audio.volume = isMuted ? 0 : volume;
 
-      audio.addEventListener('ended', () => {
+      // Set up event listeners
+      const handleLoadedMetadata = () => {
+        setDuration(audio.duration);
+      };
+
+      const handleTimeUpdate = () => {
+        setCurrentTime(audio.currentTime);
+      };
+
+      const handleEnded = () => {
         setIsPlaying(false);
         setCurrentTime(0);
         stopTimeTracking();
-      });
+      };
 
-      audio.addEventListener('error', () => {
+      const handleError = () => {
         setError('Audio playback failed');
         setIsPlaying(false);
         stopTimeTracking();
-      });
+      };
+
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('ended', handleEnded);
+      audio.addEventListener('error', handleError);
 
       // Wait for audio to load
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Audio loading timeout'));
-        }, 10000); // 10 second timeout
+        }, 15000); // 15 second timeout
 
-        audio.addEventListener('canplaythrough', () => {
+        const handleCanPlayThrough = () => {
           clearTimeout(timeout);
+          audio.removeEventListener('canplaythrough', handleCanPlayThrough);
           resolve(undefined);
-        });
+        };
         
-        audio.addEventListener('error', () => {
+        const handleLoadError = () => {
           clearTimeout(timeout);
+          audio.removeEventListener('error', handleLoadError);
           reject(new Error('Audio loading failed'));
-        });
+        };
+        
+        audio.addEventListener('canplaythrough', handleCanPlayThrough);
+        audio.addEventListener('error', handleLoadError);
         
         audio.load();
       });
@@ -195,6 +258,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate audio';
       setError(errorMessage);
       console.error('Audio generation error:', err);
+      cleanup(); // Clean up on error
     } finally {
       setLoading(false);
     }
@@ -205,12 +269,17 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
     currentTime,
     duration,
     progress,
+    volume,
+    isMuted,
     play,
     pause,
     stop,
     seek,
+    setVolume,
+    toggleMute,
     generateAndPlayAudio,
     loading,
     error,
+    cleanup,
   };
 };

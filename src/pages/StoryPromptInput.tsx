@@ -1,17 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Wand2, Star, Hexagon as Dragon, Loader2, AlertTriangle, Crown } from 'lucide-react';
+import { Sparkles, Wand2, Star, Hexagon as Dragon, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
 import { useStoryGeneration } from '../hooks/useStoryGeneration';
-import { useSubscriptionLimits } from '../hooks/useSubscriptionLimits';
 
 const StoryPromptInput = () => {
   const navigate = useNavigate();
   const { isDarkMode } = useTheme();
-  const { user } = useAuth();
   const { generateStory, loading, error, warning } = useStoryGeneration();
-  const { limits, loading: limitsLoading, refreshLimits } = useSubscriptionLimits();
   
   const [formData, setFormData] = useState({
     theme: '',
@@ -19,6 +15,11 @@ const StoryPromptInput = () => {
     language: '',
     customPrompt: ''
   });
+
+  // Clear any existing story data when component mounts
+  useEffect(() => {
+    localStorage.removeItem('currentStory');
+  }, []);
 
   const themes = [
     { value: 'dragons', label: '🐉 Dragons & Magic', icon: '🐉' },
@@ -49,29 +50,17 @@ const StoryPromptInput = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
-
-    // Check if user can create stories
-    if (limits && !limits.canCreate) {
-      alert('You have reached your daily story limit. Please upgrade to Premium for unlimited stories!');
-      navigate('/subscription');
-      return;
-    }
 
     try {
+      // Clear any existing story data before generating new one
+      localStorage.removeItem('currentStory');
+      
       const story = await generateStory({
         theme: formData.theme,
         character: formData.character,
         language: formData.language,
         customPrompt: formData.customPrompt
       });
-
-      // Refresh limits after successful story creation
-      await refreshLimits();
 
       // Store the generated story data for the display page
       localStorage.setItem('currentStory', JSON.stringify(story));
@@ -86,39 +75,6 @@ const StoryPromptInput = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Redirect to auth if not logged in
-  if (!user) {
-    return (
-      <div className={`min-h-screen px-4 py-8 flex items-center justify-center transition-colors duration-300 ${
-        isDarkMode 
-          ? 'bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900' 
-          : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50'
-      }`}>
-        <div className={`text-center backdrop-blur-sm rounded-3xl p-12 border-2 shadow-lg transition-colors duration-300 ${
-          isDarkMode 
-            ? 'bg-gray-800/80 border-purple-400' 
-            : 'bg-white/80 border-purple-100'
-        }`}>
-          <h2 className={`text-3xl font-bold mb-4 transition-colors duration-300 ${
-            isDarkMode ? 'text-gray-100' : 'text-gray-800'
-          }`}>Login Required</h2>
-          <p className={`text-lg mb-6 transition-colors duration-300 ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-          }`}>
-            Please log in to create magical stories!
-          </p>
-          <button
-            onClick={() => navigate('/auth')}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-8 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const canCreateStory = !limits || limits.canCreate;
   const isFormValid = formData.theme && formData.character && formData.language;
 
   return (
@@ -157,83 +113,10 @@ const StoryPromptInput = () => {
           </p>
         </div>
 
-        {/* Usage Limits Display */}
-        {limits && !limitsLoading && (
-          <div className={`mb-6 backdrop-blur-sm rounded-2xl p-4 border-2 shadow-lg transition-colors duration-300 ${
-            limits.isSubscribed
-              ? isDarkMode 
-                ? 'bg-green-900/50 border-green-400' 
-                : 'bg-green-50 border-green-200'
-              : limits.canCreate
-                ? isDarkMode 
-                  ? 'bg-blue-900/50 border-blue-400' 
-                  : 'bg-blue-50 border-blue-200'
-                : isDarkMode 
-                  ? 'bg-red-900/50 border-red-400' 
-                  : 'bg-red-50 border-red-200'
-          }`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                {limits.isSubscribed ? (
-                  <>
-                    <Crown className="w-6 h-6 text-yellow-500" />
-                    <div>
-                      <p className={`font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
-                        Premium Member
-                      </p>
-                      <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                        Unlimited stories
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className={`w-6 h-6 ${limits.canCreate ? 'text-blue-500' : 'text-red-500'}`} />
-                    <div>
-                      <p className={`font-bold ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
-                        Free Plan
-                      </p>
-                      <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                        {limits.remaining} of {limits.dailyLimit} stories remaining today
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-              
-              {!limits.isSubscribed && (
-                <button
-                  onClick={() => navigate('/subscription')}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-2 px-4 rounded-lg text-sm hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-                >
-                  Upgrade to Premium
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Limit Reached Warning */}
-        {limits && !limits.canCreate && (
-          <div className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl max-w-2xl mx-auto flex items-start">
-            <AlertTriangle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Daily Limit Reached</p>
-              <p className="text-sm">You've created {limits.dailyCount} stories today. Upgrade to Premium for unlimited stories!</p>
-              <button
-                onClick={() => navigate('/subscription')}
-                className="mt-2 text-sm underline hover:no-underline font-medium"
-              >
-                View Premium Plans →
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Warning Display */}
         {warning && (
           <div className="mb-6 bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded-xl max-w-2xl mx-auto flex items-start">
-            <AlertTriangle className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
+            <Sparkles className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-medium">Demo Mode</p>
               <p className="text-sm">{warning}</p>
@@ -269,7 +152,7 @@ const StoryPromptInput = () => {
                   key={theme.value}
                   type="button"
                   onClick={() => handleInputChange('theme', theme.value)}
-                  disabled={loading || !canCreateStory}
+                  disabled={loading}
                   className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formData.theme === theme.value
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 border-purple-300 text-white shadow-lg'
@@ -299,7 +182,7 @@ const StoryPromptInput = () => {
                   key={character.value}
                   type="button"
                   onClick={() => handleInputChange('character', character.value)}
-                  disabled={loading || !canCreateStory}
+                  disabled={loading}
                   className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formData.character === character.value
                       ? 'bg-gradient-to-r from-blue-500 to-teal-500 border-blue-300 text-white shadow-lg'
@@ -329,7 +212,7 @@ const StoryPromptInput = () => {
                   key={language.value}
                   type="button"
                   onClick={() => handleInputChange('language', language.value)}
-                  disabled={loading || !canCreateStory}
+                  disabled={loading}
                   className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                     formData.language === language.value
                       ? 'bg-gradient-to-r from-green-500 to-blue-500 border-green-300 text-white shadow-lg'
@@ -354,7 +237,7 @@ const StoryPromptInput = () => {
             <textarea
               value={formData.customPrompt}
               onChange={(e) => handleInputChange('customPrompt', e.target.value)}
-              disabled={loading || !canCreateStory}
+              disabled={loading}
               placeholder="Tell us more about your story... What happens in your adventure?"
               className={`w-full p-4 rounded-xl border-2 font-medium resize-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDarkMode
@@ -369,7 +252,7 @@ const StoryPromptInput = () => {
           <div className="text-center">
             <button
               type="submit"
-              disabled={!isFormValid || loading || !canCreateStory}
+              disabled={!isFormValid || loading}
               className="magic-button disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 px-8 md:px-12 rounded-full text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 glow flex items-center justify-center mx-auto min-w-[200px]"
             >
               {loading ? (
@@ -377,8 +260,6 @@ const StoryPromptInput = () => {
                   <Loader2 className="w-6 h-6 mr-2 animate-spin" />
                   Creating Magic...
                 </>
-              ) : !canCreateStory ? (
-                '🔒 Upgrade for More Stories'
               ) : (
                 '🌟 Create My Story! 🌟'
               )}
@@ -387,10 +268,8 @@ const StoryPromptInput = () => {
               isDarkMode ? 'text-gray-400' : 'text-gray-600'
             }`}>
               {loading 
-                ? 'AI is generating your personalized story with illustrations and narration...' 
-                : !canCreateStory
-                  ? 'You have reached your daily story limit. Upgrade to Premium for unlimited stories!'
-                  : 'This will generate your personalized story with AI magic!'
+                ? 'AI is generating your personalized story with illustrations...' 
+                : 'This will generate your personalized story with AI magic!'
               }
             </p>
           </div>

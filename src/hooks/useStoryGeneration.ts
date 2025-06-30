@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 
 interface StoryGenerationRequest {
   theme: string;
@@ -32,13 +31,8 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const { session } = useAuth();
 
   const generateStory = async (request: StoryGenerationRequest): Promise<GeneratedStory> => {
-    if (!session?.access_token) {
-      throw new Error('Authentication required');
-    }
-
     setLoading(true);
     setError(null);
     setWarning(null);
@@ -48,7 +42,7 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify(request),
       });
