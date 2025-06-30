@@ -3,7 +3,7 @@
   
   This function handles the story generation pipeline:
   1. Generate story text using Gemini via Pica
-  2. Generate audio narration using Tavus API with pre-configured replica
+  2. Generate audio narration using Tavus API
   3. Save the complete story to Supabase
 */
 
@@ -215,7 +215,6 @@ Deno.serve(async (req: Request) => {
     let storyText: string;
     let title: string;
     let audioUrl = '';
-    let replicaId = '';
     let generationType = 'free';
 
     if (!hasStoryApiKeys) {
@@ -298,14 +297,11 @@ Deno.serve(async (req: Request) => {
         title = `The ${character}'s ${theme} Adventure`;
       }
 
-      // Step 2: Generate audio narration with Tavus using pre-configured replica
+      // Step 2: Generate audio narration with Tavus
       if (hasAudioApiKeys) {
-        console.log('Generating audio with Tavus using pre-configured replica...');
+        console.log('Generating audio narration with Tavus...');
         
         try {
-          console.log(`Using configured replica: ${TAVUS_REPLICA_ID}`);
-          replicaId = TAVUS_REPLICA_ID;
-
           const audioHeaders = {
             'x-api-key': TAVUS_API_KEY,
             'Content-Type': 'application/json'
@@ -344,7 +340,7 @@ Deno.serve(async (req: Request) => {
           // Don't fail the entire request if audio generation fails
         }
       } else {
-        console.log('Tavus API keys not fully configured - skipping audio generation (requires both TAVUS_API_KEY and TAVUS_REPLICA_ID)');
+        console.log('Tavus API keys not configured - skipping audio generation');
       }
     }
 
@@ -393,7 +389,6 @@ Deno.serve(async (req: Request) => {
         storyText: storyText,
         imageUrl: null, // No image
         audioUrl: audioUrl,
-        replicaId: replicaId,
         createdAt: savedStory[0]?.created_at
       }
     };

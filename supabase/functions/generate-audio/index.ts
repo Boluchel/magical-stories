@@ -2,7 +2,7 @@
   # Generate Audio Edge Function
   
   This function generates audio narration for stories using Tavus API
-  with a pre-configured replica ID. Falls back gracefully when API keys are not configured.
+  with graceful error handling and fallback behavior
 */
 
 const corsHeaders = {
@@ -52,26 +52,18 @@ Deno.serve(async (req: Request) => {
     const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID');
 
     if (!TAVUS_API_KEY || !TAVUS_REPLICA_ID) {
-      console.warn('Tavus API keys not configured - audio generation unavailable');
-      
-      // Return a graceful response indicating audio is not available
       return new Response(
         JSON.stringify({ 
-          error: "Audio generation not configured",
-          userMessage: "Audio generation is currently unavailable in demo mode. To enable audio narration, please configure the Tavus API keys.",
-          audioAvailable: false
+          error: "Audio generation service not configured",
+          userMessage: "Audio generation is currently unavailable. Please check your Tavus API configuration."
         }),
         {
-          status: 200, // Changed from 503 to 200 to indicate this is expected behavior
+          status: 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
 
-    console.log(`Using configured replica: ${TAVUS_REPLICA_ID}`);
-    console.log('Generating speech with replica...');
-
-    // Generate speech using the pre-configured replica
     const audioHeaders = {
       'x-api-key': TAVUS_API_KEY,
       'Content-Type': 'application/json'
@@ -101,8 +93,6 @@ Deno.serve(async (req: Request) => {
           userMessage = "Audio generation service authentication failed. Please contact support.";
         } else if (errorData.detail?.includes("quota") || errorData.detail?.includes("limit")) {
           userMessage = "Audio generation service has reached its usage limit. Please contact support or try again later.";
-        } else if (errorData.detail?.includes("replica")) {
-          userMessage = "The voice replica is not available. Please check your TAVUS_REPLICA_ID configuration.";
         }
       } catch (parseError) {
         // Use default message if parsing fails
@@ -114,8 +104,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ 
           error: "Audio generation failed",
           userMessage: userMessage,
-          details: `HTTP ${audioResponse.status}: ${audioResponse.statusText}`,
-          audioAvailable: false
+          details: `HTTP ${audioResponse.status}: ${audioResponse.statusText}`
         }),
         {
           status: audioResponse.status === 401 ? 503 : audioResponse.status,
@@ -150,10 +139,8 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ 
           speech_id: responseData.speech_id,
-          replica_id: TAVUS_REPLICA_ID,
           message: "Audio generation started. Use the speech_id to check status.",
-          userMessage: "Audio is being generated. Please try again in a few moments.",
-          audioAvailable: true
+          userMessage: "Audio is being generated. Please try again in a few moments."
         }),
         {
           status: 202, // Accepted - processing
@@ -169,8 +156,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ 
         error: "Audio generation failed", 
         userMessage: "Audio generation is temporarily unavailable. Please try again later.",
-        details: error?.message || 'Unknown error occurred',
-        audioAvailable: false
+        details: error?.message || 'Unknown error occurred'
       }),
       {
         status: 500,
