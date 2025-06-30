@@ -107,7 +107,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         audioRef.current = null;
       }
 
-      // Generate audio using ElevenLabs via edge function
+      // Generate audio using Tavus via edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-audio`, {
         method: 'POST',
         headers: {
@@ -133,6 +133,8 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
             errorMessage = 'Audio generation service is temporarily unavailable. Please try again later.';
           } else if (response.status === 401 || response.status === 403) {
             errorMessage = 'Audio generation service authentication failed. Please contact support.';
+          } else if (response.status === 202) {
+            errorMessage = 'Audio is being generated. Please try again in a few moments.';
           }
         }
         
