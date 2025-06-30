@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, PenTool, BookOpen, Heart, Info, Sparkles, Menu, X, User, LogOut, Crown } from 'lucide-react';
+import { Home, PenTool, BookOpen, Heart, Info, Sparkles, Menu, X, User, LogOut } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSubscription } from '../contexts/SubscriptionContext';
 import ThemeToggle from './ThemeToggle';
 
 const Navigation = () => {
   const location = useLocation();
   const { isDarkMode } = useTheme();
   const { user, signOut } = useAuth();
-  const { isSubscribed } = useSubscription();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -18,7 +16,6 @@ const Navigation = () => {
     { path: '/create', icon: PenTool, label: 'Create' },
     { path: '/story', icon: BookOpen, label: 'Story' },
     { path: '/saved', icon: Heart, label: 'Saved' },
-    { path: '/subscription', icon: Crown, label: 'Premium' },
     { path: '/about', icon: Info, label: 'About' },
   ];
 
@@ -69,9 +66,6 @@ const Navigation = () => {
                 >
                   <Icon className="w-5 h-5 mb-1" />
                   <span className="text-xs font-medium">{label}</span>
-                  {path === '/subscription' && isSubscribed && (
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  )}
                 </Link>
               ))}
             </div>
@@ -90,9 +84,6 @@ const Navigation = () => {
                     }`}>
                       {user.email?.split('@')[0]}
                     </span>
-                    {isSubscribed && (
-                      <Crown className="w-4 h-4 text-yellow-500" />
-                    )}
                   </div>
                   <button
                     onClick={handleSignOut}
@@ -143,7 +134,7 @@ const Navigation = () => {
                   key={path}
                   to={path}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`flex items-center space-x-3 px-3 py-3 rounded-lg transition-all duration-200 relative ${
+                  className={`flex items-center space-x-3 px-3 py-3 rounded-lg transition-all duration-200 ${
                     location.pathname === path
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
                       : isDarkMode
@@ -153,9 +144,6 @@ const Navigation = () => {
                 >
                   <Icon className="w-5 h-5" />
                   <span className="font-medium">{label}</span>
-                  {path === '/subscription' && isSubscribed && (
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full ml-auto"></div>
-                  )}
                 </Link>
               ))}
               
@@ -172,9 +160,6 @@ const Navigation = () => {
                       }`}>
                         {user.email?.split('@')[0]}
                       </span>
-                      {isSubscribed && (
-                        <Crown className="w-5 h-5 text-yellow-500 ml-auto" />
-                      )}
                     </div>
                     <button
                       onClick={handleSignOut}
