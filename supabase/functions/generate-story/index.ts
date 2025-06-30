@@ -7,8 +7,6 @@
   3. Save the complete story to Supabase
 */
 
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -180,43 +178,29 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Initialize Supabase client with proper configuration
+    // Get user ID from JWT token
+    const token = authHeader.replace('Bearer ', '');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('Missing Supabase configuration:', { 
-        hasUrl: !!supabaseUrl, 
-        hasAnonKey: !!supabaseAnonKey 
-      });
+    if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error('Supabase configuration missing');
     }
 
-    // Create Supabase client with the anon key and set the auth header
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
+    // Get user info from token
+    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        'Authorization': authHeader,
+        'apikey': supabaseServiceKey
+      }
     });
 
-    // Get user from the authenticated session
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !userData.user) {
-      console.error('Authentication error:', userError);
-      return new Response(
-        JSON.stringify({ error: "Invalid authentication token" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    if (!userResponse.ok) {
+      throw new Error('Invalid authentication token');
     }
 
-    const userId = userData.user.id;
-    console.log('Authenticated user:', userId);
+    const userData = await userResponse.json();
+    const userId = userData.id;
 
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
@@ -355,12 +339,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Step 3: Save to Supabase using the authenticated client
+    // Step 3: Save to Supabase
     console.log('Saving story to database...');
 
-    const { data: savedStory, error: insertError } = await supabase
-      .from('stories')
-      .insert({
+    // Insert story into database
+    const insertResponse = await fetch(`${supabaseUrl}/rest/v1/stories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'apikey': supabaseServiceKey,
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({
         title: title,
         theme: theme,
         character: character,
@@ -372,18 +363,19 @@ Deno.serve(async (req: Request) => {
         generation_type: generationType,
         user_id: userId
       })
-      .select()
-      .single();
+    });
 
-    if (insertError) {
-      console.error('Database insert error:', insertError);
-      throw new Error(`Database insert failed: ${insertError.message}`);
+    if (!insertResponse.ok) {
+      const errorText = await insertResponse.text();
+      throw new Error(`Database insert failed: ${errorText}`);
     }
+
+    const savedStory = await insertResponse.json();
 
     const response = {
       success: true,
       story: {
-        id: savedStory.id,
+        id: savedStory[0]?.id,
         title: title,
         theme: theme,
         character: character,
@@ -392,7 +384,7 @@ Deno.serve(async (req: Request) => {
         storyText: storyText,
         imageUrl: null, // No image
         audioUrl: audioUrl,
-        createdAt: savedStory.created_at
+        createdAt: savedStory[0]?.created_at
       }
     };
 
