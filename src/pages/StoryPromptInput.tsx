@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Wand2, Star, Hexagon as Dragon, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
@@ -17,6 +17,11 @@ const StoryPromptInput = () => {
     language: '',
     customPrompt: ''
   });
+
+  // Clear any existing story data when component mounts
+  useEffect(() => {
+    localStorage.removeItem('currentStory');
+  }, []);
 
   const themes = [
     { value: 'dragons', label: '🐉 Dragons & Magic', icon: '🐉' },
@@ -54,6 +59,9 @@ const StoryPromptInput = () => {
     }
 
     try {
+      // Clear any existing story data before generating new one
+      localStorage.removeItem('currentStory');
+      
       const story = await generateStory({
         theme: formData.theme,
         character: formData.character,

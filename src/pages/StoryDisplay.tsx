@@ -63,6 +63,16 @@ const StoryDisplay = () => {
     }
   }, [navigate, user, checkIfSaved]);
 
+  // Cleanup function to stop audio and clear state when component unmounts
+  useEffect(() => {
+    return () => {
+      // Stop any playing audio when leaving the page
+      if (isPlaying) {
+        stop();
+      }
+    };
+  }, [isPlaying, stop]);
+
   const handleSave = async () => {
     if (!story || !user) {
       if (!user) {
@@ -116,6 +126,29 @@ const StoryDisplay = () => {
     }
   };
 
+  const handleBackToCreate = () => {
+    // Stop any playing audio before navigating
+    if (isPlaying) {
+      stop();
+    }
+    
+    // Clear the current story from localStorage to ensure clean state
+    localStorage.removeItem('currentStory');
+    
+    // Navigate to create page
+    navigate('/create');
+  };
+
+  const handleViewSavedStories = () => {
+    // Stop any playing audio before navigating
+    if (isPlaying) {
+      stop();
+    }
+    
+    // Navigate to saved stories
+    navigate('/saved');
+  };
+
   if (!story) {
     return (
       <div className={`min-h-screen px-4 py-8 flex items-center justify-center transition-colors duration-300 ${
@@ -149,8 +182,8 @@ const StoryDisplay = () => {
       <div className="max-w-6xl mx-auto">
         {/* Back Button */}
         <div className="mb-6">
-          <Link
-            to="/create"
+          <button
+            onClick={handleBackToCreate}
             className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-300 ${
               isDarkMode
                 ? 'bg-gray-700/60 border border-purple-400 text-gray-200 hover:bg-gray-700/80'
@@ -159,7 +192,7 @@ const StoryDisplay = () => {
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Create Another Story</span>
-          </Link>
+          </button>
         </div>
 
         {/* Header */}
@@ -282,19 +315,19 @@ const StoryDisplay = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Link
-                  to="/create"
+                <button
+                  onClick={handleBackToCreate}
                   className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold py-3 px-2 md:px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
                 >
                   Create New Story
-                </Link>
+                </button>
 
-                <Link
-                  to="/saved"
+                <button
+                  onClick={handleViewSavedStories}
                   className="bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold py-3 px-2 md:px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
                 >
                   View Saved Stories
-                </Link>
+                </button>
               </div>
             </div>
           </div>

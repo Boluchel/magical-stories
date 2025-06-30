@@ -12,6 +12,7 @@ interface UseAudioPlayerReturn {
   generateAndPlayAudio: (text: string, language: string) => Promise<void>;
   loading: boolean;
   error: string | null;
+  cleanup: () => void;
 }
 
 export const useAudioPlayer = (): UseAudioPlayerReturn => {
@@ -22,20 +23,36 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // Cleanup function
+  const cleanup = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeEventListener('loadedmetadata', () => {});
+      audioRef.current.removeEventListener('ended', () => {});
+      audioRef.current.removeEventListener('error', () => {});
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setError(null);
+  };
+
   // Clean up on unmount
   useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
+    return cleanup;
   }, []);
 
   const updateTime = () => {
@@ -101,11 +118,8 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       setLoading(true);
       setError(null);
 
-      // Stop current audio if playing
-      if (audioRef.current) {
-        stop();
-        audioRef.current = null;
-      }
+      // Clean up any existing audio
+      cleanup();
 
       // Generate audio using ElevenLabs via edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-audio`, {
@@ -147,27 +161,32 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       }
       
       const audioUrl = URL.createObjectURL(audioBlob);
+      audioUrlRef.current = audioUrl;
 
       // Create new audio element
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
 
       // Set up event listeners
-      audio.addEventListener('loadedmetadata', () => {
+      const handleLoadedMetadata = () => {
         setDuration(audio.duration);
-      });
+      };
 
-      audio.addEventListener('ended', () => {
+      const handleEnded = () => {
         setIsPlaying(false);
         setCurrentTime(0);
         stopTimeTracking();
-      });
+      };
 
-      audio.addEventListener('error', () => {
+      const handleError = () => {
         setError('Audio playback failed');
         setIsPlaying(false);
         stopTimeTracking();
-      });
+      };
+
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('ended', handleEnded);
+      audio.addEventListener('error', handleError);
 
       // Wait for audio to load
       await new Promise((resolve, reject) => {
@@ -175,15 +194,20 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
           reject(new Error('Audio loading timeout'));
         }, 10000); // 10 second timeout
 
-        audio.addEventListener('canplaythrough', () => {
+        const handleCanPlayThrough = () => {
           clearTimeout(timeout);
+          audio.removeEventListener('canplaythrough', handleCanPlayThrough);
           resolve(undefined);
-        });
+        };
         
-        audio.addEventListener('error', () => {
+        const handleLoadError = () => {
           clearTimeout(timeout);
+          audio.removeEventListener('error', handleLoadError);
           reject(new Error('Audio loading failed'));
-        });
+        };
+        
+        audio.addEventListener('canplaythrough', handleCanPlayThrough);
+        audio.addEventListener('error', handleLoadError);
         
         audio.load();
       });
@@ -195,6 +219,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate audio';
       setError(errorMessage);
       console.error('Audio generation error:', err);
+      cleanup(); // Clean up on error
     } finally {
       setLoading(false);
     }
@@ -212,5 +237,6 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
     generateAndPlayAudio,
     loading,
     error,
+    cleanup,
   };
 };
