@@ -66,8 +66,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error: any) {
+      // Check if the error is related to session not found or invalid session
+      const errorMessage = error?.message?.toLowerCase() || '';
+      const isSessionError = errorMessage.includes('session not found') || 
+                           errorMessage.includes('invalid session') ||
+                           errorMessage.includes('session from session_id claim in jwt does not exist');
+      
+      if (isSessionError) {
+        // Treat session-related errors as successful logout from client perspective
+        // Clear local state explicitly
+        setUser(null);
+        setSession(null);
+        return;
+      }
+      
+      // Re-throw other errors
+      throw error;
+    }
   };
 
   const value = {
