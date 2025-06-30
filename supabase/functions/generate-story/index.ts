@@ -2,9 +2,10 @@
   # Generate Story Edge Function
   
   This function handles the story generation pipeline:
-  1. Generate story text using Gemini via Pica
-  2. Generate audio narration using ElevenLabs via Pica
-  3. Save the complete story to Supabase
+  1. Check subscription limits
+  2. Generate story text using Gemini via Pica
+  3. Generate audio narration using ElevenLabs via Pica
+  4. Save the complete story to Supabase
 */
 
 const corsHeaders = {
@@ -202,6 +203,38 @@ Deno.serve(async (req: Request) => {
     const userData = await userResponse.json();
     const userId = userData.id;
 
+    // Check subscription limits
+    console.log('Checking subscription limits for user:', userId);
+    const limitsResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/can_create_story`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'apikey': supabaseServiceKey,
+      },
+      body: JSON.stringify({ user_uuid: userId })
+    });
+
+    if (!limitsResponse.ok) {
+      const errorText = await limitsResponse.text();
+      throw new Error(`Failed to check subscription limits: ${errorText}`);
+    }
+
+    const limitsData = await limitsResponse.json();
+    
+    if (!limitsData.can_create) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Daily story limit reached", 
+          details: `You have created ${limitsData.daily_count} stories today. Upgrade to Premium for unlimited stories!`
+        }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
     const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
@@ -224,6 +257,9 @@ Deno.serve(async (req: Request) => {
       generationType = 'demo';
       
     } else {
+      // Determine generation type based on subscription
+      generationType = limitsData.is_subscribed ? 'premium' : 'free';
+
       // Step 1: Generate story text using Gemini with correct API format
       console.log('Generating story text with Gemini...');
       
@@ -295,47 +331,51 @@ Deno.serve(async (req: Request) => {
         title = `The ${character}'s ${theme} Adventure`;
       }
 
-      // Step 2: Generate audio narration with ElevenLabs
-      console.log('Generating audio narration...');
-      
-      try {
-        // Use a default child-friendly voice ID (you may need to adjust this)
-        // Common ElevenLabs child-friendly voice IDs:
-        const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
+      // Step 2: Generate audio narration with ElevenLabs (only for premium users)
+      if (limitsData.is_subscribed) {
+        console.log('Generating audio narration for premium user...');
         
-        const audioHeaders: PicaHeaders = {
-          'x-pica-secret': PICA_SECRET_KEY,
-          'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
-          'Content-Type': 'application/json'
-        };
+        try {
+          // Use a default child-friendly voice ID (you may need to adjust this)
+          // Common ElevenLabs child-friendly voice IDs:
+          const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
+          
+          const audioHeaders: PicaHeaders = {
+            'x-pica-secret': PICA_SECRET_KEY,
+            'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+            'Content-Type': 'application/json'
+          };
 
-        const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
-          method: 'POST',
-          headers: audioHeaders,
-          body: JSON.stringify({
-            text: storyText,
-            voice_id: childFriendlyVoiceId,
-            model_id: 'eleven_monolingual_v1',
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.8,
-              style: 0.3,
-              use_speaker_boost: true
-            }
-          })
-        }, 2);
+          const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
+            method: 'POST',
+            headers: audioHeaders,
+            body: JSON.stringify({
+              text: storyText,
+              voice_id: childFriendlyVoiceId,
+              model_id: 'eleven_monolingual_v1',
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.8,
+                style: 0.3,
+                use_speaker_boost: true
+              }
+            })
+          }, 2);
 
-        if (audioResponse.ok) {
-          // For now, we'll store a placeholder URL since we'd need to upload the audio blob
-          // In a production app, you'd upload the audio to Supabase Storage
-          audioUrl = 'audio_generated'; // Placeholder
-          console.log('Audio generated successfully');
-        } else {
-          console.warn('Audio generation failed, continuing without audio');
+          if (audioResponse.ok) {
+            // For now, we'll store a placeholder URL since we'd need to upload the audio blob
+            // In a production app, you'd upload the audio to Supabase Storage
+            audioUrl = 'audio_generated'; // Placeholder
+            console.log('Audio generated successfully');
+          } else {
+            console.warn('Audio generation failed, continuing without audio');
+          }
+        } catch (error) {
+          console.warn('Audio generation failed, continuing without audio:', error?.message || error);
+          // Don't fail the entire request if audio generation fails
         }
-      } catch (error) {
-        console.warn('Audio generation failed, continuing without audio:', error?.message || error);
-        // Don't fail the entire request if audio generation fails
+      } else {
+        console.log('Free user - skipping audio generation');
       }
     }
 

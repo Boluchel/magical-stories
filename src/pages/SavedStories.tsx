@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, Trash2, Plus, BookOpen, Loader2, Volume2 } from 'lucide-react';
+import { Play, Heart, Trash2, Plus, BookOpen, Loader2, Volume2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useStories } from '../hooks/useStories';
@@ -94,7 +94,7 @@ const SavedStories = () => {
           <p className={`text-lg mb-6 transition-colors duration-300 ${
             isDarkMode ? 'text-gray-300' : 'text-gray-700'
           }`}>
-            Please log in to view your stories!
+            Please log in to view your saved stories!
           </p>
           <button
             onClick={() => navigate('/auth')}

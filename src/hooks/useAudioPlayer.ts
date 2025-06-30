@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface UseAudioPlayerReturn {
   isPlaying: boolean;
@@ -12,8 +12,6 @@ interface UseAudioPlayerReturn {
   generateAndPlayAudio: (text: string, language: string) => Promise<void>;
   loading: boolean;
   error: string | null;
-  hasAudio: boolean;
-  cleanup: () => void;
 }
 
 export const useAudioPlayer = (): UseAudioPlayerReturn => {
@@ -22,145 +20,77 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasAudio, setHasAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
-  const isInitializedRef = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  // Cleanup function
-  const cleanup = useCallback(() => {
-    console.log('Cleaning up audio player');
-    
-    if (audioRef.current) {
-      // Remove all event listeners
-      audioRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audioRef.current.removeEventListener('canplaythrough', handleCanPlayThrough);
-      audioRef.current.removeEventListener('ended', handleEnded);
-      audioRef.current.removeEventListener('error', handleError);
-      audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
-      audioRef.current.removeEventListener('play', handlePlay);
-      audioRef.current.removeEventListener('pause', handlePause);
-      
-      // Pause and reset
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current.src = '';
-      audioRef.current = null;
-    }
-    
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = null;
-    }
-    
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setError(null);
-    setHasAudio(false);
-    isInitializedRef.current = false;
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
   }, []);
 
-  // Event handlers
-  const handleLoadedMetadata = useCallback(() => {
-    if (audioRef.current) {
-      console.log('Audio metadata loaded, duration:', audioRef.current.duration);
-      setDuration(audioRef.current.duration);
-      setHasAudio(true);
-      isInitializedRef.current = true;
-    }
-  }, []);
-
-  const handleCanPlayThrough = useCallback(() => {
-    console.log('Audio can play through');
-    setHasAudio(true);
-    isInitializedRef.current = true;
-  }, []);
-
-  const handleEnded = useCallback(() => {
-    console.log('Audio playback ended');
-    setIsPlaying(false);
-    setCurrentTime(0);
-  }, []);
-
-  const handleError = useCallback((e: Event) => {
-    console.error('Audio element error:', e);
-    setError('Audio playback failed');
-    setIsPlaying(false);
-    setHasAudio(false);
-  }, []);
-
-  const handleTimeUpdate = useCallback(() => {
+  const updateTime = () => {
     if (audioRef.current) {
       setCurrentTime(audioRef.current.currentTime);
     }
-  }, []);
+  };
 
-  const handlePlay = useCallback(() => {
-    console.log('Audio play event fired');
-    setIsPlaying(true);
-  }, []);
+  const startTimeTracking = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    intervalRef.current = setInterval(updateTime, 100);
+  };
 
-  const handlePause = useCallback(() => {
-    console.log('Audio pause event fired');
-    setIsPlaying(false);
-  }, []);
-
-  // Clean up on unmount
-  useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+  const stopTimeTracking = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
 
   const play = async () => {
-    if (!audioRef.current || !hasAudio || !isInitializedRef.current) {
-      console.log('Cannot play: audio not ready', { 
-        hasAudio: !!audioRef.current, 
-        hasAudioState: hasAudio, 
-        initialized: isInitializedRef.current 
-      });
-      return;
-    }
-
-    try {
-      console.log('Attempting to play audio...');
-      setError(null);
-      
-      // Ensure we're not already playing
-      if (!audioRef.current.paused) {
-        console.log('Audio is already playing');
-        return;
+    if (audioRef.current) {
+      try {
+        await audioRef.current.play();
+        setIsPlaying(true);
+        startTimeTracking();
+      } catch (err) {
+        setError('Failed to play audio');
+        console.error('Audio play error:', err);
       }
-
-      await audioRef.current.play();
-      console.log('Audio play() succeeded');
-    } catch (err) {
-      console.error('Audio play error:', err);
-      setError('Failed to play audio');
-      setIsPlaying(false);
     }
   };
 
   const pause = () => {
-    if (audioRef.current && !audioRef.current.paused) {
-      console.log('Pausing audio...');
+    if (audioRef.current) {
       audioRef.current.pause();
+      setIsPlaying(false);
+      stopTimeTracking();
     }
   };
 
   const stop = () => {
     if (audioRef.current) {
-      console.log('Stopping audio...');
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
       setCurrentTime(0);
+      setIsPlaying(false);
+      stopTimeTracking();
     }
   };
 
   const seek = (time: number) => {
-    if (audioRef.current && hasAudio && isInitializedRef.current) {
-      console.log('Seeking to:', time);
+    if (audioRef.current) {
       audioRef.current.currentTime = time;
       setCurrentTime(time);
     }
@@ -171,10 +101,11 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       setLoading(true);
       setError(null);
 
-      // Clean up any existing audio
-      cleanup();
-
-      console.log('Generating audio for text:', text.substring(0, 50) + '...');
+      // Stop current audio if playing
+      if (audioRef.current) {
+        stop();
+        audioRef.current = null;
+      }
 
       // Generate audio using ElevenLabs via edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-audio`, {
@@ -187,6 +118,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       });
 
       if (!response.ok) {
+        // Try to get user-friendly error message from response
         let errorMessage = 'Failed to generate audio';
         try {
           const errorData = await response.json();
@@ -196,6 +128,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
             errorMessage = errorData.error;
           }
         } catch (parseError) {
+          // If we can't parse the error, use a generic message
           if (response.status === 503) {
             errorMessage = 'Audio generation service is temporarily unavailable. Please try again later.';
           } else if (response.status === 401 || response.status === 403) {
@@ -208,70 +141,60 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
 
       const audioBlob = await response.blob();
       
+      // Check if we actually got audio data
       if (audioBlob.size === 0) {
         throw new Error('No audio data received from the service');
       }
       
-      console.log('Audio blob received, size:', audioBlob.size);
-      
       const audioUrl = URL.createObjectURL(audioBlob);
-      audioUrlRef.current = audioUrl;
 
       // Create new audio element
-      const audio = new Audio();
+      const audio = new Audio(audioUrl);
       audioRef.current = audio;
 
       // Set up event listeners
-      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.addEventListener('canplaythrough', handleCanPlayThrough);
-      audio.addEventListener('ended', handleEnded);
-      audio.addEventListener('error', handleError);
-      audio.addEventListener('timeupdate', handleTimeUpdate);
-      audio.addEventListener('play', handlePlay);
-      audio.addEventListener('pause', handlePause);
-
-      // Set the source and load
-      audio.src = audioUrl;
-      audio.load();
-
-      // Wait for audio to be ready
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Audio loading timeout'));
-        }, 15000);
-
-        const checkReady = () => {
-          if (audio.readyState >= 3) { // HAVE_FUTURE_DATA
-            clearTimeout(timeout);
-            console.log('Audio is ready to play');
-            resolve();
-          } else {
-            setTimeout(checkReady, 100);
-          }
-        };
-
-        const handleLoadError = () => {
-          clearTimeout(timeout);
-          reject(new Error('Audio loading failed'));
-        };
-
-        audio.addEventListener('error', handleLoadError, { once: true });
-        
-        if (audio.readyState >= 3) {
-          clearTimeout(timeout);
-          resolve();
-        } else {
-          checkReady();
-        }
+      audio.addEventListener('loadedmetadata', () => {
+        setDuration(audio.duration);
       });
 
-      console.log('Audio generation and setup complete');
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+        stopTimeTracking();
+      });
+
+      audio.addEventListener('error', () => {
+        setError('Audio playback failed');
+        setIsPlaying(false);
+        stopTimeTracking();
+      });
+
+      // Wait for audio to load
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Audio loading timeout'));
+        }, 10000); // 10 second timeout
+
+        audio.addEventListener('canplaythrough', () => {
+          clearTimeout(timeout);
+          resolve(undefined);
+        });
+        
+        audio.addEventListener('error', () => {
+          clearTimeout(timeout);
+          reject(new Error('Audio loading failed'));
+        });
+        
+        audio.load();
+      });
+
+      // Auto-play the generated audio
+      await play();
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate audio';
-      console.error('Audio generation error:', err);
       setError(errorMessage);
-      cleanup();
+      console.error('Audio generation error:', err);
     } finally {
       setLoading(false);
     }
@@ -289,7 +212,5 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
     generateAndPlayAudio,
     loading,
     error,
-    hasAudio,
-    cleanup,
   };
 };
