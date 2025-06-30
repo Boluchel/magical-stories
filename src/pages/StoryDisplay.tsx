@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Share2, ArrowLeft, Loader2 } from 'lucide-react';
+import { Heart, Share2, ArrowLeft, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useStoryActions } from '../hooks/useStoryActions';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import AudioPlayer from '../components/AudioPlayer';
 
@@ -20,9 +22,13 @@ interface Story {
 
 const StoryDisplay = () => {
   const { isDarkMode } = useTheme();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [story, setStory] = useState<Story | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
 
+  const { saveStory, unsaveStory, checkIfSaved } = useStoryActions();
   const {
     isPlaying,
     currentTime,
@@ -43,6 +49,11 @@ const StoryDisplay = () => {
       try {
         const parsedStory = JSON.parse(currentStory);
         setStory(parsedStory);
+        
+        // Check if story is saved
+        if (user && parsedStory.id) {
+          checkIfSaved(parsedStory.id).then(setIsSaved).catch(console.error);
+        }
       } catch (error) {
         console.error('Error parsing story data:', error);
         navigate('/create');
@@ -50,7 +61,7 @@ const StoryDisplay = () => {
     } else {
       navigate('/create');
     }
-  }, [navigate]);
+  }, [navigate, user, checkIfSaved]);
 
   // Cleanup function to stop audio and clear state when component unmounts
   useEffect(() => {
@@ -61,6 +72,32 @@ const StoryDisplay = () => {
       }
     };
   }, [isPlaying, stop]);
+
+  const handleSave = async () => {
+    if (!story || !user) {
+      if (!user) {
+        navigate('/auth');
+      }
+      return;
+    }
+
+    try {
+      setSaveLoading(true);
+      
+      if (isSaved) {
+        await unsaveStory(story.id);
+        setIsSaved(false);
+      } else {
+        await saveStory(story.id);
+        setIsSaved(true);
+      }
+    } catch (error) {
+      console.error('Error saving story:', error);
+      alert('Failed to save story. Please try again.');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
 
   const handleShare = () => {
     if (navigator.share && story) {
@@ -100,6 +137,16 @@ const StoryDisplay = () => {
     
     // Navigate to create page
     navigate('/create');
+  };
+
+  const handleViewSavedStories = () => {
+    // Stop any playing audio before navigating
+    if (isPlaying) {
+      stop();
+    }
+    
+    // Navigate to saved stories
+    navigate('/saved');
   };
 
   if (!story) {
@@ -236,6 +283,25 @@ const StoryDisplay = () => {
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-4">
                 <button
+                  onClick={handleSave}
+                  disabled={saveLoading}
+                  className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isSaved
+                      ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+                      : isDarkMode
+                        ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
+                        : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
+                  }`}
+                >
+                  {saveLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
+                  )}
+                  <span>{saveLoading ? 'Saving...' : isSaved ? 'Saved!' : user ? 'Save Story' : 'Login to Save'}</span>
+                </button>
+
+                <button
                   onClick={handleShare}
                   className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
                     isDarkMode
@@ -246,12 +312,21 @@ const StoryDisplay = () => {
                   <Share2 className="w-5 h-5" />
                   <span>Share</span>
                 </button>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={handleBackToCreate}
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold py-3 px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold py-3 px-2 md:px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
                 >
                   Create New Story
+                </button>
+
+                <button
+                  onClick={handleViewSavedStories}
+                  className="bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold py-3 px-2 md:px-6 rounded-xl text-center hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                >
+                  View Saved Stories
                 </button>
               </div>
             </div>
