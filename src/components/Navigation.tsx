@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, PenTool, BookOpen, Heart, Info, Sparkles, Menu, X, User, LogOut } from 'lucide-react';
+import { Home, PenTool, BookOpen, Heart, Info, Sparkles, Menu, X, User, LogOut, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import ThemeToggle from './ThemeToggle';
@@ -8,8 +8,9 @@ import ThemeToggle from './ThemeToggle';
 const Navigation = () => {
   const location = useLocation();
   const { isDarkMode } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
@@ -20,12 +21,24 @@ const Navigation = () => {
   ];
 
   const handleSignOut = async () => {
+    if (signingOut) return;
+    
     try {
+      setSigningOut(true);
       await signOut();
       setIsMobileMenuOpen(false);
     } catch (error) {
       console.error('Error signing out:', error);
+      // Don't show error to user since sign out usually works on the client side
+    } finally {
+      setSigningOut(false);
     }
+  };
+
+  const getUserDisplayName = () => {
+    if (!user?.email) return 'User';
+    const emailParts = user.email.split('@');
+    return emailParts[0] || 'User';
   };
 
   return (
@@ -73,7 +86,18 @@ const Navigation = () => {
             {/* User Menu & Theme Toggle */}
             <div className="flex items-center space-x-2">
               <ThemeToggle />
-              {user ? (
+              {authLoading ? (
+                <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                  isDarkMode ? 'bg-purple-800/50' : 'bg-purple-100'
+                }`}>
+                  <Loader2 className={`w-4 h-4 animate-spin ${isDarkMode ? 'text-purple-300' : 'text-purple-600'}`} />
+                  <span className={`text-sm font-medium ${
+                    isDarkMode ? 'text-purple-300' : 'text-purple-600'
+                  }`}>
+                    Loading...
+                  </span>
+                </div>
+              ) : user ? (
                 <div className="flex items-center space-x-2">
                   <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
                     isDarkMode ? 'bg-purple-800/50' : 'bg-purple-100'
@@ -82,18 +106,24 @@ const Navigation = () => {
                     <span className={`text-sm font-medium ${
                       isDarkMode ? 'text-purple-300' : 'text-purple-600'
                     }`}>
-                      {user.email?.split('@')[0]}
+                      {getUserDisplayName()}
                     </span>
                   </div>
                   <button
                     onClick={handleSignOut}
-                    className={`p-2 rounded-lg transition-colors ${
+                    disabled={signingOut}
+                    className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
                       isDarkMode 
                         ? 'text-purple-300 hover:bg-purple-800/50' 
                         : 'text-purple-600 hover:bg-purple-100'
                     }`}
+                    title="Sign Out"
                   >
-                    <LogOut className="w-4 h-4" />
+                    {signingOut ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <LogOut className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               ) : (
@@ -149,7 +179,18 @@ const Navigation = () => {
               
               {/* Mobile User Section */}
               <div className="pt-2 border-t border-gray-300">
-                {user ? (
+                {authLoading ? (
+                  <div className={`flex items-center space-x-3 px-3 py-3 rounded-lg ${
+                    isDarkMode ? 'bg-purple-800/50' : 'bg-purple-100'
+                  }`}>
+                    <Loader2 className={`w-5 h-5 animate-spin ${isDarkMode ? 'text-purple-300' : 'text-purple-600'}`} />
+                    <span className={`font-medium ${
+                      isDarkMode ? 'text-purple-300' : 'text-purple-600'
+                    }`}>
+                      Loading...
+                    </span>
+                  </div>
+                ) : user ? (
                   <div className="space-y-2">
                     <div className={`flex items-center space-x-3 px-3 py-3 rounded-lg ${
                       isDarkMode ? 'bg-purple-800/50' : 'bg-purple-100'
@@ -158,19 +199,26 @@ const Navigation = () => {
                       <span className={`font-medium ${
                         isDarkMode ? 'text-purple-300' : 'text-purple-600'
                       }`}>
-                        {user.email?.split('@')[0]}
+                        {getUserDisplayName()}
                       </span>
                     </div>
                     <button
                       onClick={handleSignOut}
-                      className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors ${
+                      disabled={signingOut}
+                      className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors disabled:opacity-50 ${
                         isDarkMode 
                           ? 'text-purple-300 hover:bg-purple-800/50' 
                           : 'text-purple-600 hover:bg-purple-100'
                       }`}
                     >
-                      <LogOut className="w-5 h-5" />
-                      <span className="font-medium">Sign Out</span>
+                      {signingOut ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <LogOut className="w-5 h-5" />
+                      )}
+                      <span className="font-medium">
+                        {signingOut ? 'Signing Out...' : 'Sign Out'}
+                      </span>
                     </button>
                   </div>
                 ) : (
