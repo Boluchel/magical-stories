@@ -137,7 +137,8 @@ const StoryDisplay = () => {
     );
   }
 
-  const hasAudio = story.audioUrl === 'audio_generated' || duration > 0;
+  // Check if we have actual playable audio (not just the placeholder)
+  const hasPlayableAudio = duration > 0;
 
   return (
     <div className={`min-h-screen px-4 py-8 transition-colors duration-300 ${
@@ -209,7 +210,7 @@ const StoryDisplay = () => {
                 onStop={stop}
                 onSeek={seek}
                 onGenerateAudio={handleGenerateAudio}
-                hasAudio={hasAudio}
+                hasAudio={hasPlayableAudio}
               />
             </div>
 
