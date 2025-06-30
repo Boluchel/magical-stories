@@ -7,6 +7,8 @@
   3. Save the complete story to Supabase
 */
 
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -178,8 +180,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Get user ID from JWT token
-    const token = authHeader.replace('Bearer ', '');
+    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
@@ -187,20 +188,23 @@ Deno.serve(async (req: Request) => {
       throw new Error('Supabase configuration missing');
     }
 
-    // Get user info from token
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        'Authorization': authHeader,
-        'apikey': supabaseServiceKey
-      }
-    });
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!userResponse.ok) {
-      throw new Error('Invalid authentication token');
+    // Get user ID from JWT token using Supabase client
+    const token = authHeader.replace('Bearer ', '');
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+
+    if (userError || !userData.user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid authentication token" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const userData = await userResponse.json();
-    const userId = userData.id;
+    const userId = userData.user.id;
 
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
@@ -339,19 +343,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Step 3: Save to Supabase
+    // Step 3: Save to Supabase using the client
     console.log('Saving story to database...');
 
-    // Insert story into database
-    const insertResponse = await fetch(`${supabaseUrl}/rest/v1/stories`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseServiceKey}`,
-        'apikey': supabaseServiceKey,
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({
+    const { data: savedStory, error: insertError } = await supabase
+      .from('stories')
+      .insert({
         title: title,
         theme: theme,
         character: character,
@@ -363,19 +360,17 @@ Deno.serve(async (req: Request) => {
         generation_type: generationType,
         user_id: userId
       })
-    });
+      .select()
+      .single();
 
-    if (!insertResponse.ok) {
-      const errorText = await insertResponse.text();
-      throw new Error(`Database insert failed: ${errorText}`);
+    if (insertError) {
+      throw new Error(`Database insert failed: ${insertError.message}`);
     }
-
-    const savedStory = await insertResponse.json();
 
     const response = {
       success: true,
       story: {
-        id: savedStory[0]?.id,
+        id: savedStory.id,
         title: title,
         theme: theme,
         character: character,
@@ -384,7 +379,7 @@ Deno.serve(async (req: Request) => {
         storyText: storyText,
         imageUrl: null, // No image
         audioUrl: audioUrl,
-        createdAt: savedStory[0]?.created_at
+        createdAt: savedStory.created_at
       }
     };
 
