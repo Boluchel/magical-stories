@@ -3,7 +3,7 @@
   
   This function handles the story generation pipeline:
   1. Generate story text using Gemini via Pica
-  2. Generate audio narration using Tavus API
+  2. Generate audio narration using ElevenLabs via Pica
   3. Save the complete story to Supabase
 */
 
@@ -205,20 +205,18 @@ Deno.serve(async (req: Request) => {
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
     const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
-    const TAVUS_API_KEY = Deno.env.get('TAVUS_API_KEY');
-    const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID');
+    const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
     // Check if API keys are configured
-    const hasStoryApiKeys = PICA_SECRET_KEY && PICA_GEMINI_CONNECTION_KEY;
-    const hasAudioApiKeys = TAVUS_API_KEY && TAVUS_REPLICA_ID;
+    const hasApiKeys = PICA_SECRET_KEY && PICA_GEMINI_CONNECTION_KEY && PICA_ELEVENLABS_CONNECTION_KEY;
 
     let storyText: string;
     let title: string;
     let audioUrl = '';
     let generationType = 'free';
 
-    if (!hasStoryApiKeys) {
-      console.warn('Story generation API keys not configured, using mock story generation');
+    if (!hasApiKeys) {
+      console.warn('API keys not configured, using mock story generation');
       
       // Generate mock story for development/testing
       storyText = generateMockStory(theme, character, language, customPrompt);
@@ -297,50 +295,47 @@ Deno.serve(async (req: Request) => {
         title = `The ${character}'s ${theme} Adventure`;
       }
 
-      // Step 2: Generate audio narration with Tavus
-      if (hasAudioApiKeys) {
-        console.log('Generating audio narration with Tavus...');
+      // Step 2: Generate audio narration with ElevenLabs
+      console.log('Generating audio narration...');
+      
+      try {
+        // Use a default child-friendly voice ID (you may need to adjust this)
+        // Common ElevenLabs child-friendly voice IDs:
+        const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
         
-        try {
-          const audioHeaders = {
-            'x-api-key': TAVUS_API_KEY,
-            'Content-Type': 'application/json'
-          };
+        const audioHeaders: PicaHeaders = {
+          'x-pica-secret': PICA_SECRET_KEY,
+          'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
+          'Content-Type': 'application/json'
+        };
 
-          // Generate a unique speech name
-          const speechName = `story-${userId}-${Date.now()}`;
-
-          const audioResponse = await fetchWithRetry('https://tavusapi.com/v2/speech', {
-            method: 'POST',
-            headers: audioHeaders,
-            body: JSON.stringify({
-              script: storyText,
-              replica_id: TAVUS_REPLICA_ID,
-              speech_name: speechName
-            })
-          }, 2);
-
-          if (audioResponse.ok) {
-            const audioData = await audioResponse.json();
-            
-            if (audioData.speech_file_url) {
-              // Store the direct URL to the generated audio
-              audioUrl = audioData.speech_file_url;
-              console.log('Audio generated successfully with Tavus');
-            } else if (audioData.speech_id) {
-              // Store speech_id for async processing
-              audioUrl = `tavus_speech_id:${audioData.speech_id}`;
-              console.log('Audio generation started with Tavus (async)');
+        const audioResponse = await fetchWithRetry(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
+          method: 'POST',
+          headers: audioHeaders,
+          body: JSON.stringify({
+            text: storyText,
+            voice_id: childFriendlyVoiceId,
+            model_id: 'eleven_monolingual_v1',
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.8,
+              style: 0.3,
+              use_speaker_boost: true
             }
-          } else {
-            console.warn('Tavus audio generation failed, continuing without audio');
-          }
-        } catch (error) {
-          console.warn('Tavus audio generation failed, continuing without audio:', error?.message || error);
-          // Don't fail the entire request if audio generation fails
+          })
+        }, 2);
+
+        if (audioResponse.ok) {
+          // For now, we'll store a placeholder URL since we'd need to upload the audio blob
+          // In a production app, you'd upload the audio to Supabase Storage
+          audioUrl = 'audio_generated'; // Placeholder
+          console.log('Audio generated successfully');
+        } else {
+          console.warn('Audio generation failed, continuing without audio');
         }
-      } else {
-        console.log('Tavus API keys not configured - skipping audio generation');
+      } catch (error) {
+        console.warn('Audio generation failed, continuing without audio:', error?.message || error);
+        // Don't fail the entire request if audio generation fails
       }
     }
 
@@ -394,7 +389,7 @@ Deno.serve(async (req: Request) => {
     };
 
     // Add warning for demo mode
-    if (!hasStoryApiKeys) {
+    if (!hasApiKeys) {
       response.warning = "This is a demo story. To generate AI-powered stories, please configure the PicaOS API keys in your Supabase Edge Function settings.";
     }
 

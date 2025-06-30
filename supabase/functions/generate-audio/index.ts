@@ -1,7 +1,7 @@
 /*
   # Generate Audio Edge Function
   
-  This function generates audio narration for stories using Tavus API
+  This function generates audio narration for stories using ElevenLabs via PicaOS
   with graceful error handling and fallback behavior
 */
 
@@ -48,14 +48,14 @@ Deno.serve(async (req: Request) => {
     }
 
     // Environment variables
-    const TAVUS_API_KEY = Deno.env.get('TAVUS_API_KEY');
-    const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID');
+    const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
+    const PICA_ELEVENLABS_CONNECTION_KEY = Deno.env.get('PICA_ELEVENLABS_CONNECTION_KEY');
 
-    if (!TAVUS_API_KEY || !TAVUS_REPLICA_ID) {
+    if (!PICA_SECRET_KEY || !PICA_ELEVENLABS_CONNECTION_KEY) {
       return new Response(
         JSON.stringify({ 
           error: "Audio generation service not configured",
-          userMessage: "Audio generation is currently unavailable. Please check your Tavus API configuration."
+          userMessage: "Audio generation is currently unavailable. Please check your API configuration."
         }),
         {
           status: 503,
@@ -64,21 +64,28 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Use a child-friendly voice ID
+    const childFriendlyVoiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam - young male voice
+    
     const audioHeaders = {
-      'x-api-key': TAVUS_API_KEY,
+      'x-pica-secret': PICA_SECRET_KEY,
+      'x-pica-connection-key': PICA_ELEVENLABS_CONNECTION_KEY,
       'Content-Type': 'application/json'
     };
 
-    // Generate a unique speech name
-    const speechName = `story-narration-${Date.now()}`;
-
-    const audioResponse = await fetch('https://tavusapi.com/v2/speech', {
+    const audioResponse = await fetch(`https://api.picaos.com/v1/passthrough/v1/text-to-speech/${childFriendlyVoiceId}`, {
       method: 'POST',
       headers: audioHeaders,
       body: JSON.stringify({
-        script: text,
-        replica_id: TAVUS_REPLICA_ID,
-        speech_name: speechName
+        text: text,
+        voice_id: childFriendlyVoiceId,
+        model_id: 'eleven_monolingual_v1',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.8,
+          style: 0.3,
+          use_speaker_boost: true
+        }
       })
     });
 
@@ -89,16 +96,16 @@ Deno.serve(async (req: Request) => {
       // Parse error details for better user messaging
       try {
         const errorData = JSON.parse(errorText);
-        if (errorData.detail?.includes("Invalid API key")) {
-          userMessage = "Audio generation service authentication failed. Please contact support.";
-        } else if (errorData.detail?.includes("quota") || errorData.detail?.includes("limit")) {
+        if (errorData.detail?.message?.includes("Free Tier usage disabled")) {
           userMessage = "Audio generation service has reached its usage limit. Please contact support or try again later.";
+        } else if (errorData.detail?.message?.includes("Unauthorized")) {
+          userMessage = "Audio generation service authentication failed. Please contact support.";
         }
       } catch (parseError) {
         // Use default message if parsing fails
       }
       
-      console.error(`Tavus audio generation failed: ${audioResponse.status} - ${errorText}`);
+      console.error(`Audio generation failed: ${audioResponse.status} - ${errorText}`);
       
       return new Response(
         JSON.stringify({ 
@@ -113,44 +120,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const responseData = await audioResponse.json();
+    // Return the audio blob directly
+    const audioBlob = await audioResponse.blob();
     
-    // Check if we got a direct file URL
-    if (responseData.speech_file_url) {
-      // Fetch the audio file and return it as a blob
-      const audioFileResponse = await fetch(responseData.speech_file_url);
-      
-      if (!audioFileResponse.ok) {
-        throw new Error(`Failed to fetch generated audio file: ${audioFileResponse.status}`);
-      }
-      
-      const audioBlob = await audioFileResponse.blob();
-      
-      return new Response(audioBlob, {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "audio/mpeg",
-          "Content-Disposition": `attachment; filename=${speechName}.mp3`
-        },
-      });
-    } else {
-      // If no direct URL, return the speech_id for polling (async generation)
-      return new Response(
-        JSON.stringify({ 
-          speech_id: responseData.speech_id,
-          message: "Audio generation started. Use the speech_id to check status.",
-          userMessage: "Audio is being generated. Please try again in a few moments."
-        }),
-        {
-          status: 202, // Accepted - processing
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+    return new Response(audioBlob, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "audio/mpeg",
+        "Content-Disposition": "attachment; filename=story-narration.mp3"
+      },
+    });
 
   } catch (error) {
-    console.error('Tavus audio generation error:', error);
+    console.error('Audio generation error:', error);
     
     return new Response(
       JSON.stringify({ 
