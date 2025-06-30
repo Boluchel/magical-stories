@@ -6,7 +6,6 @@ import Navigation from './components/Navigation';
 import Homepage from './pages/Homepage';
 import StoryPromptInput from './pages/StoryPromptInput';
 import StoryDisplay from './pages/StoryDisplay';
-import SavedStories from './pages/SavedStories';
 import About from './pages/About';
 import Auth from './pages/Auth';
 
@@ -22,7 +21,6 @@ function App() {
                 <Route path="/" element={<Homepage />} />
                 <Route path="/create" element={<StoryPromptInput />} />
                 <Route path="/story" element={<StoryDisplay />} />
-                <Route path="/saved" element={<SavedStories />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/auth" element={<Auth />} />
               </Routes>
