@@ -3,7 +3,7 @@
   
   This function handles the story generation pipeline:
   1. Generate story text using Gemini via Pica
-  2. Create a storytelling replica and generate audio narration using Tavus API
+  2. Generate audio narration using Tavus API with pre-configured replica
   3. Save the complete story to Supabase
 */
 
@@ -116,38 +116,6 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries: num
   }, maxRetries);
 }
 
-// Helper function to create a storytelling replica
-async function createStorytellingReplica(apiKey: string, language: string, theme: string, character: string): Promise<string> {
-  const replicaHeaders = {
-    'x-api-key': apiKey,
-    'Content-Type': 'application/json'
-  };
-
-  // Create a themed storytelling replica based on the story
-  const replicaName = `${theme} Story Narrator - ${character} - ${language} - ${Date.now()}`;
-
-  const replicaResponse = await fetch('https://tavusapi.com/v2/replicas', {
-    method: 'POST',
-    headers: replicaHeaders,
-    body: JSON.stringify({
-      replica_name: replicaName,
-      // Note: You'll need to provide training data for the replica
-      // This could be sample audio files or video files
-      // For now, we'll create a basic replica configuration
-      callback_url: null, // Optional webhook for completion notification
-      // training_data: [] // Add training data if available
-    })
-  });
-
-  if (!replicaResponse.ok) {
-    const errorText = await replicaResponse.text();
-    throw new Error(`Failed to create replica: ${replicaResponse.status} - ${errorText}`);
-  }
-
-  const replicaData = await replicaResponse.json();
-  return replicaData.replica_id;
-}
-
 // Generate a mock story for development/testing when API keys are missing
 function generateMockStory(theme: string, character: string, language: string, customPrompt: string): string {
   const storyTemplates = {
@@ -238,11 +206,11 @@ Deno.serve(async (req: Request) => {
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
     const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
     const TAVUS_API_KEY = Deno.env.get('TAVUS_API_KEY');
-    const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID'); // Fallback replica ID
+    const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID');
 
     // Check if API keys are configured
     const hasStoryApiKeys = PICA_SECRET_KEY && PICA_GEMINI_CONNECTION_KEY;
-    const hasAudioApiKeys = TAVUS_API_KEY;
+    const hasAudioApiKeys = TAVUS_API_KEY && TAVUS_REPLICA_ID;
 
     let storyText: string;
     let title: string;
@@ -330,22 +298,13 @@ Deno.serve(async (req: Request) => {
         title = `The ${character}'s ${theme} Adventure`;
       }
 
-      // Step 2: Create replica and generate audio narration with Tavus
+      // Step 2: Generate audio narration with Tavus using pre-configured replica
       if (hasAudioApiKeys) {
-        console.log('Creating storytelling replica and generating audio with Tavus...');
+        console.log('Generating audio with Tavus using pre-configured replica...');
         
         try {
-          // Use existing replica or create a new themed replica for this specific story
-          let currentReplicaId = TAVUS_REPLICA_ID;
-          
-          if (!currentReplicaId) {
-            currentReplicaId = await createStorytellingReplica(TAVUS_API_KEY, language, theme, character);
-            console.log(`Created replica: ${currentReplicaId}`);
-          } else {
-            console.log(`Using configured replica: ${currentReplicaId}`);
-          }
-          
-          replicaId = currentReplicaId;
+          console.log(`Using configured replica: ${TAVUS_REPLICA_ID}`);
+          replicaId = TAVUS_REPLICA_ID;
 
           const audioHeaders = {
             'x-api-key': TAVUS_API_KEY,
@@ -360,7 +319,7 @@ Deno.serve(async (req: Request) => {
             headers: audioHeaders,
             body: JSON.stringify({
               script: storyText,
-              replica_id: currentReplicaId,
+              replica_id: TAVUS_REPLICA_ID,
               speech_name: speechName
             })
           }, 2);
@@ -381,11 +340,11 @@ Deno.serve(async (req: Request) => {
             console.warn('Tavus audio generation failed, continuing without audio');
           }
         } catch (error) {
-          console.warn('Tavus replica creation or audio generation failed, continuing without audio:', error?.message || error);
+          console.warn('Tavus audio generation failed, continuing without audio:', error?.message || error);
           // Don't fail the entire request if audio generation fails
         }
       } else {
-        console.log('Tavus API keys not configured - skipping audio generation');
+        console.log('Tavus API keys not fully configured - skipping audio generation (requires both TAVUS_API_KEY and TAVUS_REPLICA_ID)');
       }
     }
 
