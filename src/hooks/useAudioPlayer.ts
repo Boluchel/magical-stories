@@ -107,8 +107,6 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         audioRef.current = null;
       }
 
-      console.log('Generating audio for text:', text.substring(0, 100) + '...');
-
       // Generate audio using ElevenLabs via edge function
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-audio`, {
         method: 'POST',
@@ -118,8 +116,6 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         },
         body: JSON.stringify({ text, language }),
       });
-
-      console.log('Audio generation response status:', response.status);
 
       if (!response.ok) {
         // Try to get user-friendly error message from response
@@ -131,30 +127,16 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
           } else if (errorData.error) {
             errorMessage = errorData.error;
           }
-          
-          // If it's a demo/configuration issue, show a helpful message
-          if (errorData.demo) {
-            errorMessage = "Audio generation is not configured. This is a demo version - please configure PicaOS API keys to enable audio narration.";
-          }
         } catch (parseError) {
-          // If we can't parse the error, use a generic message based on status
+          // If we can't parse the error, use a generic message
           if (response.status === 503) {
             errorMessage = 'Audio generation service is temporarily unavailable. Please try again later.';
           } else if (response.status === 401 || response.status === 403) {
             errorMessage = 'Audio generation service authentication failed. Please contact support.';
-          } else if (response.status === 429) {
-            errorMessage = 'Too many requests. Please wait a moment and try again.';
           }
         }
         
         throw new Error(errorMessage);
-      }
-
-      // Check if response is JSON (error) or audio blob
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const errorData = await response.json();
-        throw new Error(errorData.userMessage || errorData.error || 'Audio generation failed');
       }
 
       const audioBlob = await response.blob();
@@ -164,8 +146,6 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         throw new Error('No audio data received from the service');
       }
       
-      console.log('Audio blob received, size:', audioBlob.size);
-      
       const audioUrl = URL.createObjectURL(audioBlob);
 
       // Create new audio element
@@ -174,7 +154,6 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
 
       // Set up event listeners
       audio.addEventListener('loadedmetadata', () => {
-        console.log('Audio metadata loaded, duration:', audio.duration);
         setDuration(audio.duration);
       });
 
@@ -184,8 +163,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         stopTimeTracking();
       });
 
-      audio.addEventListener('error', (e) => {
-        console.error('Audio playback error:', e);
+      audio.addEventListener('error', () => {
         setError('Audio playback failed');
         setIsPlaying(false);
         stopTimeTracking();
@@ -195,17 +173,15 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('Audio loading timeout'));
-        }, 15000); // 15 second timeout
+        }, 10000); // 10 second timeout
 
         audio.addEventListener('canplaythrough', () => {
           clearTimeout(timeout);
-          console.log('Audio can play through');
           resolve(undefined);
         });
         
-        audio.addEventListener('error', (e) => {
+        audio.addEventListener('error', () => {
           clearTimeout(timeout);
-          console.error('Audio loading error:', e);
           reject(new Error('Audio loading failed'));
         });
         
@@ -213,13 +189,12 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       });
 
       // Auto-play the generated audio
-      console.log('Starting audio playback');
       await play();
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate audio';
-      console.error('Audio generation error:', err);
       setError(errorMessage);
+      console.error('Audio generation error:', err);
     } finally {
       setLoading(false);
     }

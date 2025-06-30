@@ -71,12 +71,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             ? 'bg-red-900/50 border-red-400 text-red-200' 
             : 'bg-red-50 border-red-200 text-red-700'
         }`}>
-          <div className="flex items-start space-x-2">
-            <VolumeX className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">Audio Generation Failed</p>
-              <p className="text-xs mt-1">{error}</p>
-            </div>
+          <div className="flex items-center space-x-2">
+            <VolumeX className="w-4 h-4 flex-shrink-0" />
+            <p className="text-sm">{error}</p>
           </div>
         </div>
       )}
@@ -91,8 +88,17 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               : 'bg-blue-500 hover:bg-blue-600 text-white'
           }`}
         >
-          <Volume2 className="w-5 h-5" />
-          <span>Generate Audio Narration</span>
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Generating Audio...</span>
+            </>
+          ) : (
+            <>
+              <Volume2 className="w-5 h-5" />
+              <span>Generate Audio Narration</span>
+            </>
+          )}
         </button>
       )}
 
@@ -161,22 +167,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             </button>
           </div>
         </div>
-      )}
-
-      {/* Retry Button for Errors */}
-      {error && (
-        <button
-          onClick={onGenerateAudio}
-          disabled={loading}
-          className={`w-full mt-3 flex items-center justify-center space-x-2 py-2 px-4 rounded-lg font-medium text-sm transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
-            isDarkMode
-              ? 'bg-gray-600 hover:bg-gray-500 text-gray-200'
-              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-          }`}
-        >
-          <Volume2 className="w-4 h-4" />
-          <span>Try Again</span>
-        </button>
       )}
     </div>
   );
