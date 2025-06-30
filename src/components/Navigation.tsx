@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, PenTool, BookOpen, Info, Sparkles, Menu, X, User, LogOut } from 'lucide-react';
+import { Home, PenTool, BookOpen, Heart, Info, Sparkles, Menu, X, User, LogOut } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import ThemeToggle from './ThemeToggle';
@@ -15,6 +15,7 @@ const Navigation = () => {
     { path: '/', icon: Home, label: 'Home' },
     { path: '/create', icon: PenTool, label: 'Create' },
     { path: '/story', icon: BookOpen, label: 'Story' },
+    { path: '/saved', icon: Heart, label: 'Saved' },
     { path: '/about', icon: Info, label: 'About' },
   ];
 
