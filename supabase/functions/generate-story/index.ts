@@ -3,7 +3,7 @@
   
   This function handles the story generation pipeline:
   1. Generate story text using Gemini via Pica
-  2. Create a storytelling persona and generate audio narration using Tavus API
+  2. Create a storytelling replica and generate audio narration using Tavus API
   3. Save the complete story to Supabase
 */
 
@@ -116,45 +116,36 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries: num
   }, maxRetries);
 }
 
-// Helper function to create a storytelling persona
-async function createStorytellingPersona(apiKey: string, replicaId: string, language: string, theme: string, character: string): Promise<string> {
-  const personaHeaders = {
+// Helper function to create a storytelling replica
+async function createStorytellingReplica(apiKey: string, language: string, theme: string, character: string): Promise<string> {
+  const replicaHeaders = {
     'x-api-key': apiKey,
     'Content-Type': 'application/json'
   };
 
-  // Create a themed storytelling persona based on the story
-  const systemPrompt = `You are a warm, engaging storyteller who specializes in reading children's stories about ${theme} adventures featuring ${character} characters. Your voice should be:
-- Expressive and animated to bring characters to life
-- Clear and easy to understand for young listeners in ${language}
-- Enthusiastic but not overwhelming
-- Gentle and comforting
-- Able to adjust tone for different characters and emotions in the story
-- Particularly skilled at ${theme}-themed narratives
+  // Create a themed storytelling replica based on the story
+  const replicaName = `${theme} Story Narrator - ${character} - ${language} - ${Date.now()}`;
 
-When reading stories, vary your pace and intonation to match the narrative flow. Use slight pauses for dramatic effect and speak with the wonder and excitement that makes ${theme} stories magical for children.`;
-
-  const contextPrompt = `You are reading a magical ${theme} story featuring a ${character} to children. The story includes adventure, friendship, magic, and learning. Your goal is to make the story come alive through your voice while keeping it appropriate and engaging for young audiences. Emphasize the ${theme} elements and bring the ${character} to life with your narration.`;
-
-  const personaResponse = await fetch('https://tavusapi.com/v2/personas', {
+  const replicaResponse = await fetch('https://tavusapi.com/v2/replicas', {
     method: 'POST',
-    headers: personaHeaders,
+    headers: replicaHeaders,
     body: JSON.stringify({
-      persona_name: `${theme} Story Narrator - ${character} - ${language}`,
-      system_prompt: systemPrompt,
-      pipeline_mode: "echo", // Use echo mode for speech generation
-      context: contextPrompt,
-      default_replica_id: replicaId
+      replica_name: replicaName,
+      // Note: You'll need to provide training data for the replica
+      // This could be sample audio files or video files
+      // For now, we'll create a basic replica configuration
+      callback_url: null, // Optional webhook for completion notification
+      // training_data: [] // Add training data if available
     })
   });
 
-  if (!personaResponse.ok) {
-    const errorText = await personaResponse.text();
-    throw new Error(`Failed to create persona: ${personaResponse.status} - ${errorText}`);
+  if (!replicaResponse.ok) {
+    const errorText = await replicaResponse.text();
+    throw new Error(`Failed to create replica: ${replicaResponse.status} - ${errorText}`);
   }
 
-  const personaData = await personaResponse.json();
-  return personaData.persona_id;
+  const replicaData = await replicaResponse.json();
+  return replicaData.replica_id;
 }
 
 // Generate a mock story for development/testing when API keys are missing
@@ -247,16 +238,16 @@ Deno.serve(async (req: Request) => {
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
     const PICA_GEMINI_CONNECTION_KEY = Deno.env.get('PICA_GEMINI_CONNECTION_KEY');
     const TAVUS_API_KEY = Deno.env.get('TAVUS_API_KEY');
-    const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID');
+    const TAVUS_REPLICA_ID = Deno.env.get('TAVUS_REPLICA_ID'); // Fallback replica ID
 
     // Check if API keys are configured
     const hasStoryApiKeys = PICA_SECRET_KEY && PICA_GEMINI_CONNECTION_KEY;
-    const hasAudioApiKeys = TAVUS_API_KEY && TAVUS_REPLICA_ID;
+    const hasAudioApiKeys = TAVUS_API_KEY;
 
     let storyText: string;
     let title: string;
     let audioUrl = '';
-    let personaId = '';
+    let replicaId = '';
     let generationType = 'free';
 
     if (!hasStoryApiKeys) {
@@ -339,14 +330,22 @@ Deno.serve(async (req: Request) => {
         title = `The ${character}'s ${theme} Adventure`;
       }
 
-      // Step 2: Create persona and generate audio narration with Tavus
+      // Step 2: Create replica and generate audio narration with Tavus
       if (hasAudioApiKeys) {
-        console.log('Creating storytelling persona and generating audio with Tavus...');
+        console.log('Creating storytelling replica and generating audio with Tavus...');
         
         try {
-          // Create a themed persona for this specific story
-          personaId = await createStorytellingPersona(TAVUS_API_KEY, TAVUS_REPLICA_ID, language, theme, character);
-          console.log(`Created persona: ${personaId}`);
+          // Use existing replica or create a new themed replica for this specific story
+          let currentReplicaId = TAVUS_REPLICA_ID;
+          
+          if (!currentReplicaId) {
+            currentReplicaId = await createStorytellingReplica(TAVUS_API_KEY, language, theme, character);
+            console.log(`Created replica: ${currentReplicaId}`);
+          } else {
+            console.log(`Using configured replica: ${currentReplicaId}`);
+          }
+          
+          replicaId = currentReplicaId;
 
           const audioHeaders = {
             'x-api-key': TAVUS_API_KEY,
@@ -361,10 +360,8 @@ Deno.serve(async (req: Request) => {
             headers: audioHeaders,
             body: JSON.stringify({
               script: storyText,
-              replica_id: TAVUS_REPLICA_ID,
+              replica_id: currentReplicaId,
               speech_name: speechName
-              // Note: If Tavus supports persona_id in speech generation, add it here
-              // persona_id: personaId
             })
           }, 2);
 
@@ -384,7 +381,7 @@ Deno.serve(async (req: Request) => {
             console.warn('Tavus audio generation failed, continuing without audio');
           }
         } catch (error) {
-          console.warn('Tavus persona creation or audio generation failed, continuing without audio:', error?.message || error);
+          console.warn('Tavus replica creation or audio generation failed, continuing without audio:', error?.message || error);
           // Don't fail the entire request if audio generation fails
         }
       } else {
@@ -437,7 +434,7 @@ Deno.serve(async (req: Request) => {
         storyText: storyText,
         imageUrl: null, // No image
         audioUrl: audioUrl,
-        personaId: personaId,
+        replicaId: replicaId,
         createdAt: savedStory[0]?.created_at
       }
     };
