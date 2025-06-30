@@ -50,14 +50,18 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   };
 
   const handlePlayPause = () => {
+    console.log('Play/Pause button clicked', { hasAudio, isPlaying });
+    
     if (!hasAudio) {
       console.log('No audio available to play');
       return;
     }
     
     if (isPlaying) {
+      console.log('Calling onPause');
       onPause();
     } else {
+      console.log('Calling onPlay');
       onPlay();
     }
   };
@@ -174,10 +178,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             </button>
           </div>
 
-          {/* Debug info (remove in production) */}
+          {/* Debug info (development only) */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="text-xs text-gray-500 mt-2">
-              Debug: hasAudio={hasAudio.toString()}, duration={duration.toFixed(2)}s, currentTime={currentTime.toFixed(2)}s
+            <div className="text-xs text-gray-500 mt-2 p-2 bg-gray-100 rounded">
+              <div>hasAudio: {hasAudio.toString()}</div>
+              <div>isPlaying: {isPlaying.toString()}</div>
+              <div>duration: {duration.toFixed(2)}s</div>
+              <div>currentTime: {currentTime.toFixed(2)}s</div>
+              <div>progress: {progress.toFixed(1)}%</div>
             </div>
           )}
         </div>
