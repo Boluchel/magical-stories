@@ -141,6 +141,25 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         throw new Error(errorMessage);
       }
 
+      // Check the Content-Type header to determine if we received audio or JSON
+      const contentType = response.headers.get('Content-Type') || '';
+      
+      if (contentType.includes('application/json')) {
+        // Handle JSON response (e.g., async generation or demo mode limitations)
+        const jsonData = await response.json();
+        let errorMessage = 'Audio generation is not available';
+        
+        if (jsonData.userMessage) {
+          errorMessage = jsonData.userMessage;
+        } else if (jsonData.error) {
+          errorMessage = jsonData.error;
+        } else if (jsonData.message) {
+          errorMessage = jsonData.message;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
       const audioBlob = await response.blob();
       
       // Check if we actually got audio data
