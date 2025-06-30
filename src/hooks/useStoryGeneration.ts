@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface StoryGenerationRequest {
   theme: string;
@@ -38,11 +39,18 @@ export const useStoryGeneration = (): UseStoryGenerationReturn => {
     setWarning(null);
 
     try {
+      // Get the current user's session token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session?.access_token) {
+        throw new Error('Authentication required. Please log in to generate stories.');
+      }
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-story`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(request),
       });
