@@ -34,17 +34,31 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const { isDarkMode } = useTheme();
 
   const formatTime = (time: number) => {
+    if (!isFinite(time) || isNaN(time)) return '0:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (duration > 0) {
+    if (duration > 0 && hasAudio) {
       const rect = e.currentTarget.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const newTime = (clickX / rect.width) * duration;
       onSeek(newTime);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (!hasAudio) {
+      console.log('No audio available to play');
+      return;
+    }
+    
+    if (isPlaying) {
+      onPause();
+    } else {
+      onPlay();
     }
   };
 
@@ -88,17 +102,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               : 'bg-blue-500 hover:bg-blue-600 text-white'
           }`}
         >
-          {loading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Generating Audio...</span>
-            </>
-          ) : (
-            <>
-              <Volume2 className="w-5 h-5" />
-              <span>Generate Audio Narration</span>
-            </>
-          )}
+          <Volume2 className="w-5 h-5" />
+          <span>Generate Audio Narration</span>
         </button>
       )}
 
@@ -142,7 +147,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <div className="flex items-center justify-center space-x-4">
             <button
               onClick={onStop}
-              className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 ${
+              disabled={!hasAudio}
+              className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDarkMode
                   ? 'bg-gray-600 hover:bg-gray-500 text-gray-200'
                   : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
@@ -152,8 +158,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             </button>
 
             <button
-              onClick={isPlaying ? onPause : onPlay}
-              className={`p-3 rounded-full transition-all duration-300 transform hover:scale-110 ${
+              onClick={handlePlayPause}
+              disabled={!hasAudio}
+              className={`p-3 rounded-full transition-all duration-300 transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDarkMode
                   ? 'bg-blue-600 hover:bg-blue-700 text-white'
                   : 'bg-blue-500 hover:bg-blue-600 text-white'
@@ -166,6 +173,13 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               )}
             </button>
           </div>
+
+          {/* Debug info (remove in production) */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="text-xs text-gray-500 mt-2">
+              Debug: hasAudio={hasAudio.toString()}, duration={duration.toFixed(2)}s, currentTime={currentTime.toFixed(2)}s
+            </div>
+          )}
         </div>
       )}
     </div>
