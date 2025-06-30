@@ -74,13 +74,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           return;
         }
 
-        // Initialize RevenueCat with Paddle configuration (only once)
+        // Initialize RevenueCat with Web API key (only once)
         if (!isInitialized) {
-          // Use the Paddle public key for RevenueCat Web
-          const paddlePublicKey = 'pdl_sdbx_apikey_01jye7n5adfb5z4jpqzchwp847_Q8SM3abTbQRSQffRQHdxeQ_A2B';
+          // Use the RevenueCat Web API key from environment variables
+          const revenueCatWebApiKey = import.meta.env.VITE_REVENUECAT_WEB_API_KEY;
           
-          if (!paddlePublicKey) {
-            throw new Error('Paddle public key not found. Please check your configuration.');
+          if (!revenueCatWebApiKey) {
+            throw new Error('RevenueCat Web API key not found. Please check your .env file and ensure VITE_REVENUECAT_WEB_API_KEY is set.');
           }
 
           // Determine user ID for initial configuration
@@ -92,11 +92,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             }
           }
 
-          console.log('Configuring RevenueCat with Paddle and user ID:', appUserId || 'anonymous');
+          console.log('Configuring RevenueCat with Web API key and user ID:', appUserId || 'anonymous');
 
-          // Configure RevenueCat with Paddle
+          // Configure RevenueCat with the correct Web API key
           await Purchases.configure({
-            apiKey: paddlePublicKey,
+            apiKey: revenueCatWebApiKey,
             appUserId: appUserId // null for anonymous, or valid user ID
           });
           
