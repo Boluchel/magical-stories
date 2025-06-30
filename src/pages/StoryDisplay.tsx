@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, Share2, ArrowLeft, Loader2 } from 'lucide-react';
+import { Share2, ArrowLeft, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useStoryActions } from '../hooks/useStoryActions';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import AudioPlayer from '../components/AudioPlayer';
 
@@ -25,10 +24,7 @@ const StoryDisplay = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [story, setStory] = useState<Story | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
-  const [saveLoading, setSaveLoading] = useState(false);
 
-  const { saveStory, unsaveStory, checkIfSaved } = useStoryActions();
   const {
     isPlaying,
     currentTime,
@@ -41,6 +37,7 @@ const StoryDisplay = () => {
     generateAndPlayAudio,
     loading: audioLoading,
     error: audioError,
+    hasAudio,
   } = useAudioPlayer();
 
   useEffect(() => {
@@ -49,11 +46,6 @@ const StoryDisplay = () => {
       try {
         const parsedStory = JSON.parse(currentStory);
         setStory(parsedStory);
-        
-        // Check if story is saved
-        if (user && parsedStory.id) {
-          checkIfSaved(parsedStory.id).then(setIsSaved).catch(console.error);
-        }
       } catch (error) {
         console.error('Error parsing story data:', error);
         navigate('/create');
@@ -61,7 +53,7 @@ const StoryDisplay = () => {
     } else {
       navigate('/create');
     }
-  }, [navigate, user, checkIfSaved]);
+  }, [navigate, user]);
 
   // Cleanup function to stop audio and clear state when component unmounts
   useEffect(() => {
@@ -72,32 +64,6 @@ const StoryDisplay = () => {
       }
     };
   }, [isPlaying, stop]);
-
-  const handleSave = async () => {
-    if (!story || !user) {
-      if (!user) {
-        navigate('/auth');
-      }
-      return;
-    }
-
-    try {
-      setSaveLoading(true);
-      
-      if (isSaved) {
-        await unsaveStory(story.id);
-        setIsSaved(false);
-      } else {
-        await saveStory(story.id);
-        setIsSaved(true);
-      }
-    } catch (error) {
-      console.error('Error saving story:', error);
-      alert('Failed to save story. Please try again.');
-    } finally {
-      setSaveLoading(false);
-    }
-  };
 
   const handleShare = () => {
     if (navigator.share && story) {
@@ -170,9 +136,6 @@ const StoryDisplay = () => {
     );
   }
 
-  // Check if we have actual playable audio (not just the placeholder)
-  const hasPlayableAudio = duration > 0;
-
   return (
     <div className={`min-h-screen px-4 py-8 transition-colors duration-300 ${
       isDarkMode 
@@ -243,7 +206,7 @@ const StoryDisplay = () => {
                 onStop={stop}
                 onSeek={seek}
                 onGenerateAudio={handleGenerateAudio}
-                hasAudio={hasPlayableAudio}
+                hasAudio={hasAudio}
               />
             </div>
 
@@ -281,26 +244,7 @@ const StoryDisplay = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={handleSave}
-                  disabled={saveLoading}
-                  className={`flex items-center justify-center space-x-2 py-3 px-2 md:px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isSaved
-                      ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-                      : isDarkMode
-                        ? 'bg-gray-700/60 border-2 border-pink-400 text-gray-200 hover:bg-gray-700/80'
-                        : 'bg-white/60 border-2 border-pink-200 text-gray-700 hover:bg-white/80'
-                  }`}
-                >
-                  {saveLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Heart className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                  )}
-                  <span>{saveLoading ? 'Saving...' : isSaved ? 'Saved!' : user ? 'Save Story' : 'Login to Save'}</span>
-                </button>
-
+              <div className="grid grid-cols-1 gap-4">
                 <button
                   onClick={handleShare}
                   className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
@@ -310,7 +254,7 @@ const StoryDisplay = () => {
                   }`}
                 >
                   <Share2 className="w-5 h-5" />
-                  <span>Share</span>
+                  <span>Share Story</span>
                 </button>
               </div>
 

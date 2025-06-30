@@ -12,6 +12,7 @@ interface UseAudioPlayerReturn {
   generateAndPlayAudio: (text: string, language: string) => Promise<void>;
   loading: boolean;
   error: string | null;
+  hasAudio: boolean;
   cleanup: () => void;
 }
 
@@ -21,6 +22,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasAudio, setHasAudio] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -48,6 +50,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
     setCurrentTime(0);
     setDuration(0);
     setError(null);
+    setHasAudio(false);
   };
 
   // Clean up on unmount
@@ -170,6 +173,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
       // Set up event listeners
       const handleLoadedMetadata = () => {
         setDuration(audio.duration);
+        setHasAudio(true); // Set hasAudio to true when metadata is loaded
       };
 
       const handleEnded = () => {
@@ -182,6 +186,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
         setError('Audio playback failed');
         setIsPlaying(false);
         stopTimeTracking();
+        setHasAudio(false);
       };
 
       audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -237,6 +242,7 @@ export const useAudioPlayer = (): UseAudioPlayerReturn => {
     generateAndPlayAudio,
     loading,
     error,
+    hasAudio,
     cleanup,
   };
 };
