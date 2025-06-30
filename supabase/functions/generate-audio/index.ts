@@ -2,7 +2,7 @@
   # Generate Audio Edge Function
   
   This function generates audio narration for stories using Tavus API
-  with graceful error handling and fallback behavior
+  with persona creation for consistent voice characteristics
 */
 
 const corsHeaders = {
@@ -14,6 +14,46 @@ const corsHeaders = {
 interface AudioRequest {
   text: string;
   language: string;
+}
+
+// Helper function to create a storytelling persona
+async function createStorytellingPersona(apiKey: string, replicaId: string, language: string): Promise<string> {
+  const personaHeaders = {
+    'x-api-key': apiKey,
+    'Content-Type': 'application/json'
+  };
+
+  // Create a child-friendly storytelling persona
+  const systemPrompt = `You are a warm, engaging storyteller who specializes in reading children's stories. Your voice should be:
+- Expressive and animated to bring characters to life
+- Clear and easy to understand for young listeners
+- Enthusiastic but not overwhelming
+- Gentle and comforting
+- Able to adjust tone for different characters and emotions in the story
+
+When reading stories, vary your pace and intonation to match the narrative flow. Use slight pauses for dramatic effect and speak with the wonder and excitement that makes stories magical for children.`;
+
+  const contextPrompt = `You are reading a magical story to children. The story may include various themes like adventures, friendship, magic, and learning. Your goal is to make the story come alive through your voice while keeping it appropriate and engaging for young audiences.`;
+
+  const personaResponse = await fetch('https://tavusapi.com/v2/personas', {
+    method: 'POST',
+    headers: personaHeaders,
+    body: JSON.stringify({
+      persona_name: `Story Narrator - ${language}`,
+      system_prompt: systemPrompt,
+      pipeline_mode: "echo", // Use echo mode for speech generation
+      context: contextPrompt,
+      default_replica_id: replicaId
+    })
+  });
+
+  if (!personaResponse.ok) {
+    const errorText = await personaResponse.text();
+    throw new Error(`Failed to create persona: ${personaResponse.status} - ${errorText}`);
+  }
+
+  const personaData = await personaResponse.json();
+  return personaData.persona_id;
 }
 
 Deno.serve(async (req: Request) => {
@@ -64,6 +104,31 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log('Creating storytelling persona...');
+    
+    // Step 1: Create a storytelling persona
+    let personaId: string;
+    try {
+      personaId = await createStorytellingPersona(TAVUS_API_KEY, TAVUS_REPLICA_ID, language);
+      console.log(`Created persona: ${personaId}`);
+    } catch (error) {
+      console.error('Failed to create persona:', error);
+      return new Response(
+        JSON.stringify({ 
+          error: "Failed to create storytelling persona",
+          userMessage: "Audio generation setup failed. Please try again later.",
+          details: error?.message || 'Unknown error occurred'
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    console.log('Generating speech with persona...');
+
+    // Step 2: Generate speech using the persona
     const audioHeaders = {
       'x-api-key': TAVUS_API_KEY,
       'Content-Type': 'application/json'
@@ -78,7 +143,9 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         script: text,
         replica_id: TAVUS_REPLICA_ID,
-        speech_name: speechName
+        speech_name: speechName,
+        // Note: If Tavus supports persona_id in speech generation, add it here
+        // persona_id: personaId
       })
     });
 
@@ -139,6 +206,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ 
           speech_id: responseData.speech_id,
+          persona_id: personaId,
           message: "Audio generation started. Use the speech_id to check status.",
           userMessage: "Audio is being generated. Please try again in a few moments."
         }),

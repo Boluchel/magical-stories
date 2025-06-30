@@ -3,7 +3,7 @@
   
   This function handles the story generation pipeline:
   1. Generate story text using Gemini via Pica
-  2. Generate audio narration using Tavus API
+  2. Create a storytelling persona and generate audio narration using Tavus API
   3. Save the complete story to Supabase
 */
 
@@ -116,6 +116,47 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries: num
   }, maxRetries);
 }
 
+// Helper function to create a storytelling persona
+async function createStorytellingPersona(apiKey: string, replicaId: string, language: string, theme: string, character: string): Promise<string> {
+  const personaHeaders = {
+    'x-api-key': apiKey,
+    'Content-Type': 'application/json'
+  };
+
+  // Create a themed storytelling persona based on the story
+  const systemPrompt = `You are a warm, engaging storyteller who specializes in reading children's stories about ${theme} adventures featuring ${character} characters. Your voice should be:
+- Expressive and animated to bring characters to life
+- Clear and easy to understand for young listeners in ${language}
+- Enthusiastic but not overwhelming
+- Gentle and comforting
+- Able to adjust tone for different characters and emotions in the story
+- Particularly skilled at ${theme}-themed narratives
+
+When reading stories, vary your pace and intonation to match the narrative flow. Use slight pauses for dramatic effect and speak with the wonder and excitement that makes ${theme} stories magical for children.`;
+
+  const contextPrompt = `You are reading a magical ${theme} story featuring a ${character} to children. The story includes adventure, friendship, magic, and learning. Your goal is to make the story come alive through your voice while keeping it appropriate and engaging for young audiences. Emphasize the ${theme} elements and bring the ${character} to life with your narration.`;
+
+  const personaResponse = await fetch('https://tavusapi.com/v2/personas', {
+    method: 'POST',
+    headers: personaHeaders,
+    body: JSON.stringify({
+      persona_name: `${theme} Story Narrator - ${character} - ${language}`,
+      system_prompt: systemPrompt,
+      pipeline_mode: "echo", // Use echo mode for speech generation
+      context: contextPrompt,
+      default_replica_id: replicaId
+    })
+  });
+
+  if (!personaResponse.ok) {
+    const errorText = await personaResponse.text();
+    throw new Error(`Failed to create persona: ${personaResponse.status} - ${errorText}`);
+  }
+
+  const personaData = await personaResponse.json();
+  return personaData.persona_id;
+}
+
 // Generate a mock story for development/testing when API keys are missing
 function generateMockStory(theme: string, character: string, language: string, customPrompt: string): string {
   const storyTemplates = {
@@ -215,6 +256,7 @@ Deno.serve(async (req: Request) => {
     let storyText: string;
     let title: string;
     let audioUrl = '';
+    let personaId = '';
     let generationType = 'free';
 
     if (!hasStoryApiKeys) {
@@ -297,11 +339,15 @@ Deno.serve(async (req: Request) => {
         title = `The ${character}'s ${theme} Adventure`;
       }
 
-      // Step 2: Generate audio narration with Tavus
+      // Step 2: Create persona and generate audio narration with Tavus
       if (hasAudioApiKeys) {
-        console.log('Generating audio narration with Tavus...');
+        console.log('Creating storytelling persona and generating audio with Tavus...');
         
         try {
+          // Create a themed persona for this specific story
+          personaId = await createStorytellingPersona(TAVUS_API_KEY, TAVUS_REPLICA_ID, language, theme, character);
+          console.log(`Created persona: ${personaId}`);
+
           const audioHeaders = {
             'x-api-key': TAVUS_API_KEY,
             'Content-Type': 'application/json'
@@ -317,6 +363,8 @@ Deno.serve(async (req: Request) => {
               script: storyText,
               replica_id: TAVUS_REPLICA_ID,
               speech_name: speechName
+              // Note: If Tavus supports persona_id in speech generation, add it here
+              // persona_id: personaId
             })
           }, 2);
 
@@ -336,7 +384,7 @@ Deno.serve(async (req: Request) => {
             console.warn('Tavus audio generation failed, continuing without audio');
           }
         } catch (error) {
-          console.warn('Tavus audio generation failed, continuing without audio:', error?.message || error);
+          console.warn('Tavus persona creation or audio generation failed, continuing without audio:', error?.message || error);
           // Don't fail the entire request if audio generation fails
         }
       } else {
@@ -389,6 +437,7 @@ Deno.serve(async (req: Request) => {
         storyText: storyText,
         imageUrl: null, // No image
         audioUrl: audioUrl,
+        personaId: personaId,
         createdAt: savedStory[0]?.created_at
       }
     };
