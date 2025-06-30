@@ -180,21 +180,32 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client with proper configuration
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing Supabase configuration:', { 
+        hasUrl: !!supabaseUrl, 
+        hasAnonKey: !!supabaseAnonKey 
+      });
       throw new Error('Supabase configuration missing');
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Create Supabase client with the anon key and set the auth header
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
 
-    // Get user ID from JWT token using Supabase client
-    const token = authHeader.replace('Bearer ', '');
-    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    // Get user from the authenticated session
+    const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError || !userData.user) {
+      console.error('Authentication error:', userError);
       return new Response(
         JSON.stringify({ error: "Invalid authentication token" }),
         {
@@ -205,6 +216,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const userId = userData.user.id;
+    console.log('Authenticated user:', userId);
 
     // Environment variables
     const PICA_SECRET_KEY = Deno.env.get('PICA_SECRET_KEY');
@@ -343,7 +355,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Step 3: Save to Supabase using the client
+    // Step 3: Save to Supabase using the authenticated client
     console.log('Saving story to database...');
 
     const { data: savedStory, error: insertError } = await supabase
@@ -364,6 +376,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (insertError) {
+      console.error('Database insert error:', insertError);
       throw new Error(`Database insert failed: ${insertError.message}`);
     }
 
