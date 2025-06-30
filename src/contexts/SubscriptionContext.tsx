@@ -76,11 +76,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         // Initialize RevenueCat with Web API key (only once)
         if (!isInitialized) {
-          // Use the RevenueCat Web API key from environment variables
-          const revenueCatWebApiKey = import.meta.env.VITE_REVENUECAT_WEB_API_KEY;
+          // Use the RevenueCat public key from environment variables
+          const revenueCatPublicKey = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY;
           
-          if (!revenueCatWebApiKey) {
-            throw new Error('RevenueCat Web API key not found. Please check your .env file and ensure VITE_REVENUECAT_WEB_API_KEY is set.');
+          if (!revenueCatPublicKey) {
+            throw new Error('RevenueCat public key not found. Please check your .env file and ensure VITE_REVENUECAT_PUBLIC_KEY is set.');
           }
 
           // Determine user ID for initial configuration
@@ -92,11 +92,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
             }
           }
 
-          console.log('Configuring RevenueCat with Web API key and user ID:', appUserId || 'anonymous');
+          console.log('Configuring RevenueCat with public key and user ID:', appUserId || 'anonymous');
 
-          // Configure RevenueCat with the correct Web API key
+          // Configure RevenueCat with the correct public key
           await Purchases.configure({
-            apiKey: revenueCatWebApiKey,
+            apiKey: revenueCatPublicKey,
             appUserId: appUserId // null for anonymous, or valid user ID
           });
           
